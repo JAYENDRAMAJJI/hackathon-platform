@@ -183,19 +183,26 @@ export default function UserManagement() {
   };
 
   const handleExportCSV = () => {
-    exportJsonToCsv('platform_users_export', users, {
-      id: 'User ID',
-      name: 'Full Name',
-      email: 'Email Address',
-      role: 'Role',
-      status: 'Status',
-      registrationDate: 'Registration Date',
-      lastLogin: 'Last Login',
-      score: 'Score',
-      currentDifficulty: 'Current Level',
-      sessionStatus: 'Session Status',
-    });
-    toast.success('Users CSV export downloaded');
+    if (!users || users.length === 0) {
+      toast.warning('No user records available to export');
+      return;
+    }
+
+    const exportData = users.map((u) => ({
+      'User ID': u.id,
+      'Full Name': u.name,
+      'Email Address': u.email,
+      'Role': u.role,
+      'Account Status': u.status === 'ACTIVE' ? 'Active' : u.status === 'PENDING' ? 'Pending Approval' : u.status === 'SUSPENDED' ? 'Suspended' : u.status || 'Active',
+      'Registration Date': formatDate(u.registrationDate),
+      'Last Login': formatDate(u.lastLogin),
+      'Score': u.score ?? 0,
+      'Current Level': u.currentDifficulty ? `Level ${u.currentDifficulty}` : 'Level 1',
+      'Session Status': u.sessionStatus || 'OFFLINE',
+    }));
+
+    exportJsonToCsv('Hackathon_Arena_Users', exportData);
+    toast.success(`Exported ${exportData.length} user records to CSV`);
   };
 
   return (

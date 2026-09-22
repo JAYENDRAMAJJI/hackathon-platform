@@ -23,6 +23,7 @@ import {
 import { apiClient } from '../../lib/api';
 import { useToast } from '../../context/AdminToastContext';
 import { Contest, User } from '../../types/admin';
+import AssignFacultyDropdown from '../../components/admin/AssignFacultyDropdown';
 
 export default function EditContest() {
   const { id: contestId } = useParams<{ id: string }>();
@@ -418,58 +419,16 @@ export default function EditContest() {
         </div>
 
         {/* Section 1b: Assigned Faculty Supervisors */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-            <div>
-              <h2 className="text-base font-bold text-white flex items-center gap-2">
-                <UserCheck className="w-4 h-4 text-purple-400" /> Assigned Faculty Supervisors
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Faculty members assigned here will receive live telemetry, submissions, and proctoring access.
-              </p>
-            </div>
-            <span className="text-xs font-bold text-purple-400 bg-purple-500/15 px-3 py-1 rounded-full border border-purple-500/30">
-              {selectedFacultyIds.length} Faculty Assigned
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {availableFaculty.length === 0 ? (
-              <p className="text-xs text-slate-400 col-span-2 py-4 text-center">No faculty members registered.</p>
-            ) : (
-              availableFaculty.map((fac) => {
-                const isSelected = selectedFacultyIds.includes(fac.id);
-                return (
-                  <label
-                    key={fac.id}
-                    className={`flex items-start gap-3 p-3.5 rounded-xl border transition-all cursor-pointer text-xs ${
-                      isSelected
-                        ? 'bg-purple-600/15 border-purple-500/50 text-white'
-                        : 'bg-slate-800/50 border-slate-800 hover:border-slate-700 text-slate-300'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => {
-                        if (isSelected) {
-                          setSelectedFacultyIds(selectedFacultyIds.filter((id) => id !== fac.id));
-                        } else {
-                          setSelectedFacultyIds([...selectedFacultyIds, fac.id]);
-                        }
-                      }}
-                      className="mt-0.5 rounded bg-slate-700 border-slate-600 text-purple-600 focus:ring-0"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-bold text-white truncate">{fac.name}</div>
-                      <div className="text-slate-400 text-[11px] truncate">{fac.email}</div>
-                      <div className="text-purple-300 text-[10px] mt-0.5 font-medium">{fac.department || 'Computer Science'}</div>
-                    </div>
-                  </label>
-                );
-              })
-            )}
-          </div>
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+          <AssignFacultyDropdown
+            contestId={contestId}
+            contestName={formData.name || contest?.name}
+            selectedFacultyIds={selectedFacultyIds}
+            onChange={(ids) => setSelectedFacultyIds(ids)}
+            showSaveButton={true}
+            title="Assigned Faculty Supervisors"
+            description="Faculty members assigned here receive live telemetry, student submission logs, proctoring alert notifications, and exclusive supervisory access."
+          />
         </div>
 
         {/* Section 2: Difficulty & Calibration Rules */}

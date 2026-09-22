@@ -77,19 +77,28 @@ export default function StudentAnalytics() {
   const filtered = getFilteredStudents();
 
   const handleExportCSV = () => {
-    exportJsonToCsv('student_cohort_analytics', filtered, {
-      id: 'Student ID',
-      name: 'Name',
-      email: 'Email',
-      score: 'Score',
-      rank: 'Rank',
-      currentDifficulty: 'Level',
-      solvedCount: 'Solved',
-      skippedCount: 'Skipped',
-      attemptsCount: 'Attempts',
-      sessionStatus: 'Status',
-    });
-    toast.success('Cohort analytics exported');
+    if (!filtered || filtered.length === 0) {
+      toast.warning('No student cohort records available to export');
+      return;
+    }
+
+    const exportData = filtered.map((s) => ({
+      'Student ID': s.id,
+      'Student Name': s.name,
+      'Email Address': s.email,
+      'Department': s.department || 'Computer Science & Engineering',
+      'Total Score': s.score ?? 0,
+      'Rank': s.rank ?? 'Unranked',
+      'Current Level': s.currentDifficulty ? `Level ${s.currentDifficulty}` : 'Level 1',
+      'Problems Solved': s.solvedCount ?? 0,
+      'Problems Skipped': s.skippedCount ?? 0,
+      'Total Attempts': s.attemptsCount ?? 0,
+      'Session Status': s.sessionStatus || 'OFFLINE',
+      'Cohort Filter': activeFilter,
+    }));
+
+    exportJsonToCsv('Hackathon_Arena_Student_Cohort_Analytics', exportData);
+    toast.success(`Exported ${exportData.length} student cohort records to CSV`);
   };
 
   return (

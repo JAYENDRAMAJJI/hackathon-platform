@@ -10,8 +10,6 @@ import {
   AlertTriangle,
   CheckCircle,
   XCircle,
-  Moon,
-  Sun,
   ChevronUp,
   ChevronDown,
   Terminal as TerminalIcon,
@@ -41,7 +39,6 @@ export default function ContestArena() {
   const [showSaveToast, setShowSaveToast] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
   const [result, setResult] = useState<any>(null);
-  const [editorTheme, setEditorTheme] = useState<'vs-dark' | 'light'>('vs-dark');
   const [consoleHeight, setConsoleHeight] = useState(220);
   const [isConsoleExpanded, setIsConsoleExpanded] = useState(true);
   const [consoleOutput, setConsoleOutput] = useState<string>('// Execution Console: Run or submit code to view compiler and test diagnostics...');
@@ -563,35 +560,16 @@ export default function ContestArena() {
         {/* Right Panel: Kotlin Editor & Diagnostics Console */}
         <div className="flex-1 flex flex-col relative">
           {/* Editor Header Bar */}
-          <div
-            className={`h-10 flex items-center justify-between px-4 shrink-0 transition-colors ${
-              editorTheme === 'vs-dark'
-                ? 'bg-slate-900 text-slate-400 border-b border-slate-800'
-                : 'bg-slate-100 text-slate-600 border-b border-slate-200'
-            }`}
-          >
+          <div className="h-10 flex items-center justify-between px-4 shrink-0 bg-slate-900 text-slate-400 border-b border-slate-800">
             <div className="text-xs font-mono font-bold flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
               solution.kt (Kotlin 2.0 / JVM 21)
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setEditorTheme((prev) => (prev === 'vs-dark' ? 'light' : 'vs-dark'))}
-                className={`p-1.5 rounded-lg transition-colors ${
-                  editorTheme === 'vs-dark'
-                    ? 'hover:bg-slate-800 text-slate-400 hover:text-white'
-                    : 'hover:bg-slate-200 text-slate-600 hover:text-slate-900'
-                }`}
-                title="Toggle editor theme"
-              >
-                {editorTheme === 'vs-dark' ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
-              </button>
-            </div>
           </div>
 
           {/* Monaco Editor */}
-          <div className={`flex-1 w-full ${editorTheme === 'vs-dark' ? 'bg-[#1e1e1e]' : 'bg-white'}`}>
-            <KotlinEditor code={code} onChange={setCode} theme={editorTheme} />
+          <div className="flex-1 w-full bg-[#1e1e1e]">
+            <KotlinEditor code={code} onChange={setCode} theme="vs-dark" />
           </div>
 
           {/* Resizable Output Console */}

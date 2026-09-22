@@ -11,7 +11,6 @@ export const BRAND_CONFIG = {
   tagline: 'CODE. SOLVE. COMPETE.',
   description:
     'Hackathon Arena 2.0 - A real-time university coding competition platform for algorithmic programming challenges, progressive difficulty, secure code evaluation and live competition tracking.',
-  phase: 'Phase 1: Algorithmic Core Engine',
   duration: '2 Hours Synchronized',
   levelsCount: 10,
   language: 'Kotlin 2.0',

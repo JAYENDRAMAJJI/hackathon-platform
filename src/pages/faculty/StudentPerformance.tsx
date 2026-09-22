@@ -138,23 +138,27 @@ export default function StudentPerformance() {
   const currentStudent = students.find((s) => s.id === selectedStudentId);
 
   const handleExportCSV = () => {
-    if (!metrics || !currentStudent) return;
+    if (!metrics || !currentStudent) {
+      showToast('warning', 'No performance metrics available to export');
+      return;
+    }
     const summaryData = [
-      { Metric: 'Student ID', Value: currentStudent.id },
-      { Metric: 'Student Name', Value: currentStudent.name },
-      { Metric: 'Email', Value: currentStudent.email },
-      { Metric: 'Department', Value: currentStudent.department || 'N/A' },
-      { Metric: 'Total Score', Value: `${metrics.totalScore} pts` },
-      { Metric: 'Questions Solved', Value: metrics.questionsSolved },
-      { Metric: 'Questions Failed', Value: metrics.questionsFailed },
-      { Metric: 'Questions Skipped', Value: metrics.questionsSkipped },
-      { Metric: 'Total Attempts', Value: metrics.totalAttempts },
-      { Metric: 'Success Rate', Value: `${metrics.successRate}%` },
-      { Metric: 'Current Difficulty', Value: `Level ${metrics.currentDifficulty}` },
-      { Metric: 'Average Time', Value: metrics.averageTime },
+      { 'Metric': 'Student ID', 'Value': currentStudent.id },
+      { 'Metric': 'Student Name', 'Value': currentStudent.name },
+      { 'Metric': 'Email Address', 'Value': currentStudent.email },
+      { 'Metric': 'Department', 'Value': currentStudent.department || 'Computer Science & Engineering' },
+      { 'Metric': 'Total Contest Score', 'Value': `${metrics.totalScore} pts` },
+      { 'Metric': 'Questions Solved', 'Value': metrics.questionsSolved },
+      { 'Metric': 'Questions Failed', 'Value': metrics.questionsFailed },
+      { 'Metric': 'Questions Skipped', 'Value': metrics.questionsSkipped },
+      { 'Metric': 'Total Attempts', 'Value': metrics.totalAttempts },
+      { 'Metric': 'Success Rate', 'Value': `${metrics.successRate}%` },
+      { 'Metric': 'Current Difficulty Level', 'Value': `Level ${metrics.currentDifficulty}` },
+      { 'Metric': 'Highest Difficulty Level', 'Value': `Level ${metrics.highestDifficulty || metrics.currentDifficulty}` },
+      { 'Metric': 'Average Solving Time', 'Value': metrics.averageTime },
     ];
-    exportToCSV(summaryData, `Student_Performance_${currentStudent.name.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.csv`);
-    showToast('success', 'Student performance exported to CSV');
+    exportToCSV(`Hackathon_Arena_Student_Performance_${currentStudent.name.replace(/\s+/g, '_')}`, summaryData);
+    showToast('success', `Exported performance report for ${currentStudent.name} to CSV`);
   };
 
   return (

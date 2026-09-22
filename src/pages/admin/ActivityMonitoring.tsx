@@ -52,16 +52,25 @@ export default function ActivityMonitoring() {
   }, [search, actionFilter]);
 
   const handleExportCSV = () => {
-    exportJsonToCsv('participant_activity_logs', logs, {
-      timestamp: 'Timestamp',
-      studentName: 'Student Name',
-      action: 'Event Action',
-      details: 'Details',
-      ipAddress: 'IP Address',
-      device: 'Device',
-      sessionId: 'Session ID',
-    });
-    toast.success('Activity logs exported to CSV');
+    if (!logs || logs.length === 0) {
+      toast.warning('No activity logs available to export');
+      return;
+    }
+
+    const exportData = logs.map((l) => ({
+      'Log ID': l.id,
+      'Timestamp': formatDate(l.timestamp),
+      'Student ID': l.studentId,
+      'Student Name': l.studentName,
+      'Event Action': l.action,
+      'Details': l.details,
+      'IP Address': l.ipAddress,
+      'Device': l.device,
+      'Session ID': l.sessionId,
+    }));
+
+    exportJsonToCsv('Hackathon_Arena_Activity_Logs', exportData);
+    toast.success(`Exported ${exportData.length} activity records to CSV`);
   };
 
   return (

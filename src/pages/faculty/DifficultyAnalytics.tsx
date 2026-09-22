@@ -70,19 +70,22 @@ export default function DifficultyAnalytics() {
   }, []);
 
   const handleExportCSV = () => {
-    if (!matrix || matrix.length === 0) return;
+    if (!matrix || matrix.length === 0) {
+      showToast('warning', 'No difficulty matrix data available to export');
+      return;
+    }
     const formatted = matrix.map((row) => ({
       'Difficulty Level': `Level ${row.level}`,
       'Questions in Bank': row.questionsCount,
-      'Assigned Students at Level': row.studentsCurrentCount,
+      'Students Currently at Level': row.studentsCurrentCount,
       'Total Attempts': row.attempts,
       'Success Rate (%)': `${row.successRate}%`,
       'Failure Rate (%)': `${row.failureRate}%`,
       'Skip Rate (%)': `${row.skipRate}%`,
       'Avg Solving Time': row.averageSolvingTime,
     }));
-    exportToCSV(formatted, `Faculty_Difficulty_Matrix_Levels_1_10_${new Date().toISOString().slice(0, 10)}.csv`);
-    showToast('success', 'Difficulty matrix exported to CSV');
+    exportToCSV('Hackathon_Arena_Faculty_Difficulty_Matrix', formatted);
+    showToast('success', `Exported ${formatted.length} difficulty level metrics to CSV`);
   };
 
   const handleRequestSubmit = async (e: React.FormEvent) => {

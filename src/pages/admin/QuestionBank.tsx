@@ -26,14 +26,20 @@ import { Question } from '../../types/admin';
 import { formatDate } from '../../lib/exportUtils';
 import { useToast } from '../../context/AdminToastContext';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
+import { useAuthStore } from '../../store/authStore';
+import ContextSelector from '../../components/ContextSelector';
 
 export default function QuestionBank() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { user } = useAuthStore();
+  const isAdmin = user?.role === 'ADMIN';
+
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState(searchParams.get('search') || '');
   const [difficultyFilter, setDifficultyFilter] = useState(searchParams.get('difficulty') || 'ALL');
   const [categoryFilter, setCategoryFilter] = useState(searchParams.get('category') || 'ALL');
+  const [contextFilter, setContextFilter] = useState(searchParams.get('contextId') || 'ALL');
 
   // Modals
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -71,23 +77,26 @@ export default function QuestionBank() {
 
   const toast = useToast();
 
-  const fetchQuestions = async (overrideParams?: { search?: string; difficulty?: string; category?: string }) => {
+  const fetchQuestions = async (overrideParams?: { search?: string; difficulty?: string; category?: string; contextId?: string }) => {
     setLoading(true);
     try {
       const activeSearch = overrideParams?.search !== undefined ? overrideParams.search : search;
       const activeDifficulty = overrideParams?.difficulty !== undefined ? overrideParams.difficulty : difficultyFilter;
       const activeCategory = overrideParams?.category !== undefined ? overrideParams.category : categoryFilter;
+      const activeContext = overrideParams?.contextId !== undefined ? overrideParams.contextId : contextFilter;
 
       const params: Record<string, string> = {};
       if (activeSearch) params.search = activeSearch;
       if (activeDifficulty && activeDifficulty !== 'ALL') params.difficulty = activeDifficulty;
       if (activeCategory && activeCategory !== 'ALL') params.category = activeCategory;
+      if (activeContext && activeContext !== 'ALL') params.contextId = activeContext;
 
       // Sync with URL params
       const newUrlParams = new URLSearchParams();
       if (activeSearch) newUrlParams.set('search', activeSearch);
       if (activeDifficulty && activeDifficulty !== 'ALL') newUrlParams.set('difficulty', activeDifficulty);
       if (activeCategory && activeCategory !== 'ALL') newUrlParams.set('category', activeCategory);
+      if (activeContext && activeContext !== 'ALL') newUrlParams.set('contextId', activeContext);
       setSearchParams(newUrlParams, { replace: true });
 
       const resp = await apiClient.get('/admin/questions', params);
@@ -106,13 +115,14 @@ export default function QuestionBank() {
       fetchQuestions();
     }, 150);
     return () => clearTimeout(timer);
-  }, [search, difficultyFilter, categoryFilter]);
+  }, [search, difficultyFilter, categoryFilter, contextFilter]);
 
   const handleResetFilters = () => {
     setSearch('');
     setDifficultyFilter('ALL');
     setCategoryFilter('ALL');
-    fetchQuestions({ search: '', difficulty: 'ALL', category: 'ALL' });
+    setContextFilter('ALL');
+    fetchQuestions({ search: '', difficulty: 'ALL', category: 'ALL', contextId: 'ALL' });
   };
 
   const handleOpenCreateModal = () => {
@@ -231,7 +241,7 @@ export default function QuestionBank() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
-            <Code2 className="w-6 h-6 text-emerald-400" /> Question Bank & Difficulty Management (Levels 1–10)
+            <Code2 className="w-6 h-6 text-emerald-400" /> Question Manager
           </h1>
           <p className="text-sm text-slate-400 mt-1">
             Author algorithmic challenges, manage visible and hidden test suites, and monitor solve rates.
@@ -245,18 +255,26 @@ export default function QuestionBank() {
           >
             <Trophy className="w-4 h-4 text-amber-400" /> Contest Pools
           </Link>
-          <Link
-            to="/admin/questions/difficulty"
-            className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 transition-all"
-          >
-            <Sliders className="w-4 h-4 text-blue-400" /> Calibration Suite
-          </Link>
-          <button
-            onClick={handleOpenCreateModal}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/25 transition-all"
-          >
-            <PlusCircle className="w-4 h-4" /> Add New Question
-          </button>
+          {isAdmin && (
+            <Link
+              to="/admin/questions/difficulty"
+              className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 transition-all"
+            >
+              <Sliders className="w-4 h-4 text-blue-400" /> Calibration Suite
+            </Link>
+          )}
+          {isAdmin ? (
+            <button
+              onClick={handleOpenCreateModal}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/25 transition-all"
+            >
+              <PlusCircle className="w-4 h-4" /> Add New Question
+            </button>
+          ) : (
+            <div className="px-3 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700 text-xs font-semibold text-slate-400">
+              Read-Only Access
+            </div>
+          )}
         </div>
       </div>
 
@@ -301,6 +319,18 @@ export default function QuestionBank() {
         </form>
 
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+          {/* Context Filter Dropdown */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400 font-medium">Context:</span>
+            <ContextSelector
+              selectedContextId={contextFilter}
+              onContextChange={(ctx) => setContextFilter(ctx)}
+              variant="dark"
+              size="sm"
+              className="w-44 sm:w-56"
+            />
+          </div>
+
           {/* Difficulty Filter */}
           <div className="flex items-center gap-2">
             <span className="text-xs text-slate-400 font-medium">Difficulty:</span>
@@ -338,7 +368,7 @@ export default function QuestionBank() {
           </div>
 
           {/* Active Filter Clear / Count */}
-          {(search || difficultyFilter !== 'ALL' || categoryFilter !== 'ALL') && (
+          {(search || difficultyFilter !== 'ALL' || categoryFilter !== 'ALL' || contextFilter !== 'ALL') && (
             <button
               onClick={handleResetFilters}
               className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold border border-slate-700 transition-all flex items-center gap-1.5"
@@ -451,34 +481,38 @@ export default function QuestionBank() {
                           <Link
                             to={`/admin/test-cases?questionId=${q.id}`}
                             className="p-1.5 rounded-lg text-purple-400 hover:bg-purple-950/40"
-                            title="Manage Test Cases"
+                            title="View / Manage Test Cases"
                           >
                             <CheckSquare className="w-4 h-4" />
                           </Link>
-                          <button
-                            onClick={() => {
-                              setModalState({ isOpen: true, type: 'CHANGE_DIFFICULTY', targetQuestion: q });
-                              setNewDifficulty(q.difficulty);
-                            }}
-                            className="p-1.5 rounded-lg text-amber-400 hover:bg-amber-950/40"
-                            title="Calibrate Difficulty Level"
-                          >
-                            <Sliders className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleOpenEditModal(q)}
-                            className="p-1.5 rounded-lg text-blue-400 hover:bg-blue-950/40"
-                            title="Edit Question"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => setModalState({ isOpen: true, type: 'DELETE', targetQuestion: q })}
-                            className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-950/40"
-                            title="Delete Question"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {isAdmin && (
+                            <>
+                              <button
+                                onClick={() => {
+                                  setModalState({ isOpen: true, type: 'CHANGE_DIFFICULTY', targetQuestion: q });
+                                  setNewDifficulty(q.difficulty);
+                                }}
+                                className="p-1.5 rounded-lg text-amber-400 hover:bg-amber-950/40"
+                                title="Calibrate Difficulty Level"
+                              >
+                                <Sliders className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleOpenEditModal(q)}
+                                className="p-1.5 rounded-lg text-blue-400 hover:bg-blue-950/40"
+                                title="Edit Question"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => setModalState({ isOpen: true, type: 'DELETE', targetQuestion: q })}
+                                className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-950/40"
+                                title="Delete Question"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>

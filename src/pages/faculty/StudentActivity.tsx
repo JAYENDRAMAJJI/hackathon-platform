@@ -24,7 +24,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { apiClient } from '../../lib/api';
 import { ActivityLog, User } from '../../types/admin';
-import { exportToCSV } from '../../lib/exportUtils';
+import { exportToCSV, formatDate } from '../../lib/exportUtils';
 import { useToast } from '../../context/AdminToastContext';
 
 export default function StudentActivity() {
@@ -118,18 +118,22 @@ export default function StudentActivity() {
   };
 
   const handleExportCSV = () => {
-    if (!filteredActivities || filteredActivities.length === 0) return;
+    if (!filteredActivities || filteredActivities.length === 0) {
+      showToast('warning', 'No student activity records available to export');
+      return;
+    }
     const formatted = filteredActivities.map((act) => ({
-      Timestamp: act.timestamp,
+      'Timestamp': formatDate(act.timestamp),
       'Student ID': act.studentId,
       'Student Name': act.studentName,
-      Activity: act.activity,
-      'Question Title': act.questionTitle || '-',
-      Difficulty: act.difficulty ? `Level ${act.difficulty}` : '-',
-      Result: act.result || '-',
+      'Event Activity': act.action || act.details,
+      'Details / Question': act.details || '-',
+      'Session ID': act.sessionId || '-',
+      'IP Address': act.ipAddress || '-',
+      'Device': act.device || '-',
     }));
-    exportToCSV(formatted, `Faculty_Activity_Timeline_${new Date().toISOString().slice(0, 10)}.csv`);
-    showToast('success', 'Student activity timeline exported to CSV');
+    exportToCSV('Hackathon_Arena_Student_Activity_Timeline', formatted);
+    showToast('success', `Exported ${formatted.length} activity records to CSV`);
   };
 
   return (

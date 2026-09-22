@@ -17,15 +17,23 @@ import {
 } from 'lucide-react';
 import { apiClient } from '../../lib/api';
 import { LiveSession } from '../../types/admin';
-import { formatTimeRemaining, exportJsonToCsv } from '../../lib/exportUtils';
+import { formatTimeRemaining, exportJsonToCsv, formatDate } from '../../lib/exportUtils';
 import { useToast } from '../../context/AdminToastContext';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
+import { useAuthStore } from '../../store/authStore';
+import ContextSelector from '../../components/ContextSelector';
+import { useSearchParams } from 'react-router-dom';
 
 export default function LiveSessions() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { user } = useAuthStore();
+  const isAdmin = user?.role === 'ADMIN';
+
   const [sessions, setSessions] = useState<LiveSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [contextFilter, setContextFilter] = useState(searchParams.get('contextId') || 'ALL');
   const [anomalyFilter, setAnomalyFilter] = useState(false);
 
   const [modalState, setModalState] = useState<{
@@ -43,7 +51,13 @@ export default function LiveSessions() {
       const params: Record<string, string | boolean> = {};
       if (search) params.search = search;
       if (statusFilter !== 'ALL') params.status = statusFilter;
+      if (contextFilter !== 'ALL') params.contextId = contextFilter;
       if (anomalyFilter) params.anomaly = true;
+
+      // Sync URL
+      const newUrlParams = new URLSearchParams();
+      if (contextFilter !== 'ALL') newUrlParams.set('contextId', contextFilter);
+      setSearchParams(newUrlParams, { replace: true });
 
       const resp = await apiClient.get('/admin/sessions', params);
       if (resp.success && resp.data) {
@@ -67,7 +81,7 @@ export default function LiveSessions() {
       clearTimeout(timer);
       clearInterval(interval);
     };
-  }, [search, statusFilter, anomalyFilter]);
+  }, [search, statusFilter, anomalyFilter, contextFilter]);
 
   const handlePause = async (reason?: string) => {
     if (!modalState.targetSession) return;
@@ -115,20 +129,34 @@ export default function LiveSessions() {
   };
 
   const handleExportCSV = () => {
-    exportJsonToCsv('live_sessions_snapshot', sessions, {
-      id: 'Session ID',
-      studentName: 'Student',
-      studentEmail: 'Email',
-      currentDifficulty: 'Level',
-      score: 'Score',
-      solvedCount: 'Solved',
-      skippedCount: 'Skipped',
-      sessionStatus: 'Status',
-      anomalyStatus: 'Anomaly Flag',
-      ipAddress: 'IP Address',
-      device: 'Device',
-    });
-    toast.success('Live sessions exported to CSV');
+    if (!sessions || sessions.length === 0) {
+      toast.warning('No active session records available to export');
+      return;
+    }
+
+    const exportData = sessions.map((s) => ({
+      'Session ID': s.id,
+      'Student ID': s.studentId,
+      'Student Name': s.studentName,
+      'Email Address': s.studentEmail,
+      'Current Level': `Level ${s.currentDifficulty}`,
+      'Current Score': s.score,
+      'Problems Solved': s.solvedCount,
+      'Problems Skipped': s.skippedCount,
+      'Total Attempts': s.attemptsCount,
+      'Time Remaining': formatTimeRemaining(s.timeRemainingSeconds),
+      'Session Status': s.sessionStatus,
+      'Anomaly Status': s.anomalyStatus,
+      'Anomaly Type': s.anomalyType || 'None',
+      'IP Address': s.ipAddress,
+      'Device': s.device,
+      'Browser': s.browser,
+      'Login Time': formatDate(s.loginTime),
+      'Last Activity': formatDate(s.lastActivity),
+    }));
+
+    exportJsonToCsv('Hackathon_Arena_Live_Sessions', exportData);
+    toast.success(`Exported ${exportData.length} live session records to CSV`);
   };
 
   const activeCount = sessions.filter((s) => s.sessionStatus === 'ACTIVE').length;
@@ -147,7 +175,7 @@ export default function LiveSessions() {
             </span>
           </div>
           <h1 className="text-2xl font-extrabold text-white tracking-tight mt-1 flex items-center gap-2.5">
-            <Activity className="w-6 h-6 text-emerald-400" /> Real-Time Participant Session Monitor
+            <Activity className="w-6 h-6 text-emerald-400" /> Live Monitor
           </h1>
           <p className="text-sm text-slate-400 mt-1">
             Track active compiler editors, verify IP integrity, and execute supervisory session interventions.
@@ -223,6 +251,18 @@ export default function LiveSessions() {
         </form>
 
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+          {/* Context Filter Dropdown */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400 font-medium">Context:</span>
+            <ContextSelector
+              selectedContextId={contextFilter}
+              onContextChange={(ctx) => setContextFilter(ctx)}
+              variant="dark"
+              size="sm"
+              className="w-48 sm:w-56"
+            />
+          </div>
+
           {/* Status Filter */}
           <div className="flex items-center gap-2">
             <span className="text-xs text-slate-400 font-medium">Session Status:</span>
@@ -367,7 +407,7 @@ export default function LiveSessions() {
                         >
                           <Eye className="w-3.5 h-3.5" /> Inspect
                         </Link>
-                        {sess.sessionStatus === 'ACTIVE' && (
+                        {isAdmin && sess.sessionStatus === 'ACTIVE' && (
                           <button
                             onClick={() => setModalState({ isOpen: true, type: 'PAUSE', targetSession: sess })}
                             className="p-1.5 rounded-lg text-amber-400 hover:bg-amber-950/40"
@@ -376,7 +416,7 @@ export default function LiveSessions() {
                             <Pause className="w-4 h-4" />
                           </button>
                         )}
-                        {sess.sessionStatus === 'PAUSED' && (
+                        {isAdmin && sess.sessionStatus === 'PAUSED' && (
                           <button
                             onClick={() => setModalState({ isOpen: true, type: 'RESUME', targetSession: sess })}
                             className="p-1.5 rounded-lg text-emerald-400 hover:bg-emerald-950/40"
@@ -385,7 +425,7 @@ export default function LiveSessions() {
                             <Play className="w-4 h-4" />
                           </button>
                         )}
-                        {sess.sessionStatus !== 'COMPLETED' && (
+                        {isAdmin && sess.sessionStatus !== 'COMPLETED' && (
                           <button
                             onClick={() => setModalState({ isOpen: true, type: 'END', targetSession: sess })}
                             className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-950/40"

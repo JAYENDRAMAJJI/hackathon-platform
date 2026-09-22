@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Award,
   Trophy,
@@ -14,24 +15,39 @@ import {
   Sliders,
 } from 'lucide-react';
 import { apiClient } from '../../lib/api';
-import { LeaderboardEntry } from '../../types/admin';
+import { LeaderboardEntry, LeaderboardFilterMeta } from '../../types/admin';
 import { exportJsonToCsv, formatDate } from '../../lib/exportUtils';
 import { useToast } from '../../context/AdminToastContext';
+import { useAuthStore } from '../../store/authStore';
+import LeaderboardFilter from '../../components/LeaderboardFilter';
 
 export default function Leaderboard() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { user } = useAuthStore();
+  const isAdmin = user?.role === 'ADMIN';
+
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [recalculating, setRecalculating] = useState(false);
+  const [filterKey, setFilterKey] = useState(
+    searchParams.get('contextId') || searchParams.get('filterKey') || 'ALL'
+  );
+  const [filterMeta, setFilterMeta] = useState<LeaderboardFilterMeta | null>(null);
 
   const toast = useToast();
 
-  const fetchLeaderboard = async () => {
+  const fetchLeaderboard = async (currentKey = filterKey) => {
     setLoading(true);
     try {
-      const resp = await apiClient.get('/admin/leaderboard');
+      const resp = await apiClient.get('/admin/leaderboard', { filterKey: currentKey, contextId: currentKey });
       if (resp.success && resp.data) {
         setEntries(resp.data);
+      }
+      if (resp.filterMeta) {
+        setFilterMeta(resp.filterMeta);
+      } else if (resp.contexts) {
+        setFilterMeta({ contexts: resp.contexts });
       }
     } catch (err: any) {
       toast.error('Failed to load leaderboard standings');
@@ -41,10 +57,19 @@ export default function Leaderboard() {
   };
 
   useEffect(() => {
-    fetchLeaderboard();
-    const interval = setInterval(fetchLeaderboard, 10000);
+    fetchLeaderboard(filterKey);
+    const interval = setInterval(() => fetchLeaderboard(filterKey), 15000);
     return () => clearInterval(interval);
-  }, []);
+  }, [filterKey]);
+
+  const handleFilterChange = (newKey: string) => {
+    setFilterKey(newKey);
+    const newUrlParams = new URLSearchParams();
+    if (newKey && newKey !== 'ALL') {
+      newUrlParams.set('contextId', newKey);
+    }
+    setSearchParams(newUrlParams, { replace: true });
+  };
 
   const handleRecalculate = async () => {
     setRecalculating(true);
@@ -52,7 +77,7 @@ export default function Leaderboard() {
       const resp = await apiClient.post('/admin/leaderboard/recalculate');
       if (resp.success) {
         toast.success('Leaderboard scores dynamically recalculated based on scoring matrix');
-        fetchLeaderboard();
+        fetchLeaderboard(filterKey);
       }
     } catch (err: any) {
       toast.error('Failed to recalculate leaderboard');
@@ -61,34 +86,72 @@ export default function Leaderboard() {
     }
   };
 
-  const handleExportCSV = () => {
-    exportJsonToCsv('hackathon_final_leaderboard', entries, {
-      rank: 'Rank',
-      studentName: 'Student Name',
-      studentEmail: 'Email',
-      score: 'Total Score',
-      solved: 'Problems Solved',
-      attempts: 'Attempts',
-      skipped: 'Skipped',
-      highestDifficulty: 'Max Level',
-      averageTimeMinutes: 'Avg Solve Time (min)',
-      lastSubmission: 'Last Activity',
-    });
-    toast.success('Leaderboard CSV export downloaded');
-  };
-
-  const handlePrint = () => {
-    window.print();
-  };
-
   const filtered = entries.filter(
     (e) =>
       e.studentName.toLowerCase().includes(search.toLowerCase()) ||
       e.studentEmail.toLowerCase().includes(search.toLowerCase())
   );
 
+  const selectedContext = filterMeta?.contexts?.find((c) => c.id === filterKey || `contest:${c.id}` === filterKey);
+  const currentContextName = filterKey === 'ALL' || !selectedContext ? 'All Contexts' : selectedContext.name;
+
+  const handleExportCSV = () => {
+    const dataToExport = filtered.length > 0 ? filtered : entries;
+    if (!dataToExport || dataToExport.length === 0) {
+      toast.warning('No leaderboard standings available to export');
+      return;
+    }
+
+    const exportData = dataToExport.map((e) => ({
+      'Rank': e.rank,
+      'Student ID': e.studentId || 'N/A',
+      'Student Name': e.studentName,
+      'Email Address': e.studentEmail,
+      'Total Score': e.score,
+      'Problems Solved': e.solved,
+      'Total Attempts': e.attempts,
+      'Problems Skipped': e.skipped,
+      'Highest Level Reached': `Level ${e.highestDifficulty || 1}`,
+      'Avg Solve Time (min)': e.averageTimeMinutes ?? 0,
+      'Last Activity': formatDate(e.lastSubmission),
+      'Context': currentContextName,
+    }));
+
+    const filename = `Hackathon_Leaderboard_${currentContextName.replace(/[^a-zA-Z0-9]/g, '_')}`;
+    exportJsonToCsv(filename, exportData);
+    toast.success(`Exported ${exportData.length} leaderboard standings to CSV`);
+  };
+
+  const handlePrint = () => {
+    if (loading && entries.length === 0) {
+      toast.warning('Leaderboard data is currently loading. Please wait.');
+      return;
+    }
+    const dataToPrint = filtered.length > 0 ? filtered : entries;
+    if (!dataToPrint || dataToPrint.length === 0) {
+      toast.warning('No leaderboard standings available to print');
+      return;
+    }
+    window.print();
+  };
+
   return (
-    <div className="space-y-6 max-w-[1600px] mx-auto animate-in fade-in duration-300 print:bg-white print:text-black">
+    <div className="space-y-6 max-w-[1600px] mx-auto animate-in fade-in duration-300 print:bg-white print:text-slate-900">
+      {/* Printable Official Institutional Header (Only in print) */}
+      <div className="hidden print:block mb-6 border-b-2 border-slate-900 pb-4">
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-xl font-black text-slate-900 tracking-tight">HACKATHON ARENA 2.0</h1>
+            <p className="text-xs text-slate-600 font-semibold uppercase tracking-wider">
+              Official Competition Leaderboard & Standings ({currentContextName})
+            </p>
+          </div>
+          <div className="text-right text-xs text-slate-600 font-mono">
+            <p>Printed: {new Date().toLocaleString()}</p>
+            <p>Certified Arena Scoring Engine</p>
+          </div>
+        </div>
+      </div>
       {/* Top Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:hidden">
         <div>
@@ -99,7 +162,7 @@ export default function Leaderboard() {
             </span>
           </div>
           <h1 className="text-2xl font-extrabold text-white tracking-tight mt-1 flex items-center gap-2.5">
-            <Award className="w-6 h-6 text-amber-400" /> Platform Contest Leaderboard & Rankings
+            <Award className="w-6 h-6 text-amber-400" /> Contest Rankings
           </h1>
           <p className="text-sm text-slate-400 mt-1">
             Authoritative algorithmic scoreboard with dynamic difficulty weighting and tie-breakers.
@@ -107,14 +170,16 @@ export default function Leaderboard() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          <button
-            onClick={handleRecalculate}
-            disabled={recalculating}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-md shadow-purple-600/20 transition-all"
-          >
-            <Sliders className={`w-4 h-4 ${recalculating ? 'animate-spin' : ''}`} />
-            {recalculating ? 'Recalculating...' : 'Recalculate Weights'}
-          </button>
+          {isAdmin && (
+            <button
+              onClick={handleRecalculate}
+              disabled={recalculating}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-md shadow-purple-600/20 transition-all"
+            >
+              <Sliders className={`w-4 h-4 ${recalculating ? 'animate-spin' : ''}`} />
+              {recalculating ? 'Recalculating...' : 'Recalculate Weights'}
+            </button>
+          )}
           <button
             onClick={handleExportCSV}
             className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 transition-all shadow-sm"
@@ -128,7 +193,7 @@ export default function Leaderboard() {
             <Printer className="w-4 h-4 text-slate-400" /> Print
           </button>
           <button
-            onClick={fetchLeaderboard}
+            onClick={() => fetchLeaderboard(filterKey)}
             className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all shadow-sm"
             title="Refresh Leaderboard"
           >
@@ -192,40 +257,36 @@ export default function Leaderboard() {
         })}
       </div>
 
-      {/* Search Filter */}
-      <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-xl flex items-center justify-between print:hidden">
-        <div className="relative w-full max-w-md">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search leaderboard by student name or email..."
-            className="w-full pl-10 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-xl text-sm text-white placeholder:text-slate-400 focus:outline-none focus:border-amber-500"
-          />
-        </div>
-        <div className="text-xs text-slate-400">
-          Ranked Participants: <b className="text-white">{filtered.length}</b>
-        </div>
-      </div>
+      {/* Search & Content-Wise Filter Toolbar */}
+      <LeaderboardFilter
+        searchValue={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search leaderboard by student name or email..."
+        selectedKey={filterKey}
+        onFilterChange={handleFilterChange}
+        meta={filterMeta}
+        totalParticipants={filtered.length}
+        variant="dark"
+        className="print:hidden"
+      />
 
       {/* Full Leaderboard Table */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden print:border-none print:shadow-none">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-slate-300">
-            <thead className="bg-slate-800/80 text-xs font-bold uppercase tracking-wider text-slate-400 border-b border-slate-700 print:bg-slate-100 print:text-black">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden print:border-none print:shadow-none print:bg-white print:overflow-visible">
+        <div className="overflow-x-auto print:overflow-visible">
+          <table className="w-full text-left text-sm text-slate-300 print:text-slate-900">
+            <thead className="bg-slate-800/80 text-xs font-bold uppercase tracking-wider text-slate-400 border-b border-slate-700 print:bg-slate-100 print:text-slate-900 print:border-slate-300">
               <tr>
-                <th className="p-4 w-16">Rank</th>
-                <th className="p-4">Student Name</th>
-                <th className="p-4">Total Score</th>
-                <th className="p-4">Problems Solved</th>
-                <th className="p-4">Attempts / Skips</th>
-                <th className="p-4">Difficulty (Active/Max)</th>
-                <th className="p-4">Avg Solving Time</th>
-                <th className="p-4">Live Status</th>
+                <th className="p-4 w-16 print:p-2 print:border print:border-slate-300">Rank</th>
+                <th className="p-4 print:p-2 print:border print:border-slate-300">Student Name</th>
+                <th className="p-4 print:p-2 print:border print:border-slate-300">Total Score</th>
+                <th className="p-4 print:p-2 print:border print:border-slate-300">Problems Solved</th>
+                <th className="p-4 print:p-2 print:border print:border-slate-300">Attempts / Skips</th>
+                <th className="p-4 print:p-2 print:border print:border-slate-300">Difficulty (Active/Max)</th>
+                <th className="p-4 print:p-2 print:border print:border-slate-300">Avg Solving Time</th>
+                <th className="p-4 print:p-2 print:border print:border-slate-300">Live Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/70 print:divide-slate-200">
+            <tbody className="divide-y divide-slate-800/70 print:divide-slate-300">
               {loading && entries.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="p-10 text-center text-slate-400">

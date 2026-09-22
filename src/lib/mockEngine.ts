@@ -11,6 +11,7 @@ export interface MockUser {
   approved: boolean;
   status: 'ACTIVE' | 'PENDING' | 'REJECTED' | 'SUSPENDED';
   department?: string;
+  employeeId?: string;
   score?: number;
   rank?: number;
   currentDifficulty?: number;
@@ -64,6 +65,7 @@ const generateInitialData = () => {
       approved: true,
       status: 'ACTIVE',
       department: 'Computer Science & Engineering',
+      employeeId: 'FAC-2024-089',
       registrationDate: '2026-02-01T08:30:00Z',
       lastLogin: new Date(Date.now() - 1800000).toISOString(),
     },
@@ -77,8 +79,51 @@ const generateInitialData = () => {
       approved: true,
       status: 'ACTIVE',
       department: 'Information Technology',
+      employeeId: 'FAC-2024-112',
       registrationDate: '2026-02-05T09:15:00Z',
       lastLogin: new Date(Date.now() - 7200000).toISOString(),
+    },
+    {
+      id: 'usr_fac_3',
+      name: 'Dr. Marcus Brody',
+      email: 'mbrody@hackathon.com',
+      aliases: ['mbrody@hackarena.edu', 'mbrody@hackathon.com', 'brody@hackarena.edu', 'mbrody'],
+      password: 'Pass@123',
+      role: 'FACULTY',
+      approved: true,
+      status: 'ACTIVE',
+      department: 'Data Science & Artificial Intelligence',
+      employeeId: 'FAC-2024-145',
+      registrationDate: '2026-02-10T11:00:00Z',
+      lastLogin: new Date(Date.now() - 14400000).toISOString(),
+    },
+    {
+      id: 'usr_fac_4',
+      name: 'Prof. Elena Rostova',
+      email: 'erostova@hackathon.com',
+      aliases: ['erostova@hackarena.edu', 'erostova@hackathon.com', 'rostova@hackarena.edu', 'erostova'],
+      password: 'Pass@123',
+      role: 'FACULTY',
+      approved: true,
+      status: 'ACTIVE',
+      department: 'Cybersecurity & Systems Engineering',
+      employeeId: 'FAC-2024-208',
+      registrationDate: '2026-02-14T14:20:00Z',
+      lastLogin: new Date(Date.now() - 21600000).toISOString(),
+    },
+    {
+      id: 'usr_fac_5',
+      name: 'Dr. Alan Sterling',
+      email: 'asterling@hackathon.com',
+      aliases: ['asterling@hackarena.edu', 'asterling@hackathon.com', 'sterling@hackarena.edu', 'asterling'],
+      password: 'Pass@123',
+      role: 'FACULTY',
+      approved: true,
+      status: 'ACTIVE',
+      department: 'Software Engineering & Cloud Computing',
+      employeeId: 'FAC-2024-331',
+      registrationDate: '2026-02-18T16:45:00Z',
+      lastLogin: new Date(Date.now() - 28800000).toISOString(),
     },
   ];
 
@@ -1021,7 +1066,7 @@ export const findMockUserByIdentifier = (identifier: string, requestedRole?: str
   if (!idLower) return null;
   const idPrefix = idLower.includes('@') ? idLower.split('@')[0] : idLower;
 
-  // 1. Direct exact email, id, aliases, or name match
+  // 1. Direct exact email, id, aliases, or full name match
   let matched = mockUsers.find(
     (u) =>
       u.email?.toLowerCase() === idLower ||
@@ -1031,7 +1076,7 @@ export const findMockUserByIdentifier = (identifier: string, requestedRole?: str
   );
   if (matched) return matched;
 
-  // 2. Direct username prefix match
+  // 2. Direct exact username prefix match (e.g., student3, usr_stu_3, khoward)
   matched = mockUsers.find(
     (u) =>
       u.email?.toLowerCase().split('@')[0] === idPrefix ||
@@ -1040,29 +1085,19 @@ export const findMockUserByIdentifier = (identifier: string, requestedRole?: str
   );
   if (matched) return matched;
 
-  // 3. Match role keywords / common prefixes
-  if (idLower === 'admin' || idPrefix === 'admin' || idLower.includes('admin') || idLower.includes('director')) {
+  // 3. Exact common role keywords
+  if (idLower === 'admin' || idLower === 'director') {
     return mockUsers.find((u) => u.role === 'ADMIN') || null;
   }
-  if (idLower === 'faculty' || idPrefix === 'faculty' || idLower.includes('faculty') || idLower.includes('vance')) {
+  if (idLower === 'faculty' || idLower === 'vance') {
     return mockUsers.find((u) => u.role === 'FACULTY') || null;
   }
-  if (idLower === 'khoward' || idLower.includes('howard')) {
-    return mockUsers.find((u) => u.id === 'usr_fac_2') || mockUsers.find((u) => u.role === 'FACULTY') || null;
-  }
-  if (idLower === 'student' || idPrefix === 'student' || idLower.startsWith('student@') || idLower.startsWith('stu')) {
+  if (idLower === 'student' || idLower === 'student1') {
     return (
       mockUsers.find((u) => u.id === 'usr_stu_3') ||
       mockUsers.find((u) => u.role === 'STUDENT' && u.approved && u.status === 'ACTIVE') ||
       null
     );
-  }
-
-  // 4. Role-based fallback if requestedRole is provided
-  if (requestedRole) {
-    const roleClean = String(requestedRole).toUpperCase();
-    matched = mockUsers.find((u) => u.role === roleClean && u.approved !== false);
-    if (matched) return matched;
   }
 
   return null;
@@ -1083,22 +1118,25 @@ export function handleMockFallback(method: string, endpoint: string, body?: any,
 
     const foundUser = findMockUserByIdentifier(identifier, role);
 
+    if (!foundUser) {
+      return { success: false, status: 401, message: 'Invalid email or password. Please check your credentials and try again.' };
+    }
+
     const passwordMatches = Boolean(
-      foundUser && (
-        foundUser.password === password ||
-        password === 'Pass@123' ||
-        password === 'password' ||
-        password === 'password123' ||
-        password === 'admin123' ||
-        password === 'admin' ||
-        password === 'Pass@1234' ||
-        password === 'faculty123' ||
-        password === 'student123' ||
-        password === '123456'
-      )
+      foundUser.password === password ||
+      password === 'Pass@123' ||
+      password === 'password' ||
+      password === 'password123' ||
+      password === 'admin123' ||
+      password === 'admin' ||
+      password === 'Pass@1234' ||
+      password === 'faculty123' ||
+      password === 'student123' ||
+      password === '123456'
     );
-    if (!foundUser || !passwordMatches) {
-      return { success: false, status: 401, message: 'Invalid email or password.' };
+
+    if (!passwordMatches) {
+      return { success: false, status: 401, message: 'Invalid email or password. Please check your credentials and try again.' };
     }
 
     if (role && foundUser.role !== role) {
@@ -1106,7 +1144,7 @@ export function handleMockFallback(method: string, endpoint: string, body?: any,
         success: false,
         status: 403,
         code: 'ROLE_MISMATCH',
-        message: `Selected role does not match this account. This account is registered as ${foundUser.role}, but you selected ${role}.`,
+        message: `Selected role does not match this account. This account is registered as ${foundUser.role}, but you selected ${role}. Please select the ${foundUser.role} role to sign in.`,
       };
     }
 
@@ -1450,6 +1488,56 @@ export function handleMockFallback(method: string, endpoint: string, body?: any,
     return { success: true, count: limited.length, total: filtered.length, data: limited };
   }
 
+  // 2b. Admin Analytics Dashboard Telemetry
+  if (cleanEndpoint === 'admin/analytics') {
+    const students = mockUsers.filter((u) => u.role === 'STUDENT' && u.approved);
+    const activeParticipants = students.filter((s) => s.sessionStatus === 'ACTIVE').length || 64;
+    const totalParticipants = students.length || 71;
+    const avgScore = students.length > 0
+      ? Math.round(students.reduce((acc, s) => acc + (s.score || 0), 0) / students.length)
+      : 148;
+
+    const scoreDistribution = [
+      { range: '0 - 50', count: Math.max(3, Math.floor(totalParticipants * 0.11)) },
+      { range: '51 - 100', count: Math.max(5, Math.floor(totalParticipants * 0.20)) },
+      { range: '101 - 150', count: Math.max(8, Math.floor(totalParticipants * 0.31)) },
+      { range: '151 - 200', count: Math.max(6, Math.floor(totalParticipants * 0.25)) },
+      { range: '201+', count: Math.max(4, Math.floor(totalParticipants * 0.13)) },
+    ];
+
+    const difficultyDistribution = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((lvl) => ({
+      level: `Level ${lvl}`,
+      participants: Math.max(5, Math.floor(totalParticipants - lvl * 5.8)),
+      successRate: Math.max(22, Math.floor(95 - lvl * 7.2)),
+      avgSolveMinutes: Number((4 + lvl * 1.6).toFixed(1)),
+    }));
+
+    const submissionResultsBreakdown = [
+      { name: 'Accepted Solutions', count: 98, color: '#10b981' },
+      { name: 'Wrong Answer', count: 26, color: '#ef4444' },
+      { name: 'Compilation Error', count: 12, color: '#f59e0b' },
+      { name: 'Time Limit Exceeded', count: 6, color: '#a855f7' },
+    ];
+
+    return {
+      success: true,
+      data: {
+        overview: {
+          totalParticipants,
+          activeParticipants,
+          overallSuccessRate: 68.4,
+          averageScore: avgScore,
+          averageSolvingTimeMinutes: 14.2,
+          submissionCount: 142,
+          completionRate: 4.2,
+        },
+        scoreDistribution,
+        difficultyDistribution,
+        submissionResultsBreakdown,
+      },
+    };
+  }
+
   // 3. Settings & Audit
   if (cleanEndpoint === 'admin/settings') {
     if (method === 'PUT' && body) {
@@ -1770,13 +1858,85 @@ export function handleMockFallback(method: string, endpoint: string, body?: any,
     };
   }
 
-  // 5. Faculty & Student Leaderboards
+  // Leaderboard Filter Metadata
+  // Leaderboard Filter Metadata (Contexts fetched dynamically from mockContests)
+  if (cleanEndpoint === 'leaderboard/filters' || cleanEndpoint === 'leaderboard/contexts') {
+    const contexts = (mockContests || []).map((c) => ({
+      id: c.id,
+      name: c.name,
+      status: c.status,
+      code: c.code || c.accessCode,
+      questionCount: (c.questionIds || []).length || c.questionCount || 0,
+      participantsCount: c.participantIds?.length || c.participantsCount || 0,
+      startTime: c.startTime,
+      endTime: c.endTime,
+      isPublished: c.isPublished,
+      leaderboardVisible: c.leaderboardVisible,
+    }));
+    return {
+      success: true,
+      count: contexts.length,
+      data: {
+        contexts,
+        contests: contexts,
+      },
+    };
+  }
+
+  // 5. Faculty, Student & Admin Context-Wise Leaderboards
   if (cleanEndpoint === 'faculty/leaderboard' || cleanEndpoint === 'student/leaderboard' || cleanEndpoint === 'admin/leaderboard' || cleanEndpoint === 'leaderboard') {
-    const students = mockUsers
-      .filter((u) => u.role === 'STUDENT' && u.approved)
-      .sort((a, b) => (b.score || 0) - (a.score || 0))
-      .map((stu, idx) => ({
-        rank: idx + 1,
+    let selectedContextId = (params?.contextId as string) || (params?.contestId as string) || '';
+    const filterKey = params?.filterKey as string;
+
+    if (filterKey) {
+      if (filterKey === 'ALL' || filterKey === 'all') {
+        selectedContextId = '';
+      } else {
+        selectedContextId = filterKey.replace(/^(contest|context):/, '');
+      }
+    }
+
+    const contexts = (mockContests || []).map((c) => ({
+      id: c.id,
+      name: c.name,
+      status: c.status,
+      code: c.code || c.accessCode,
+      questionCount: (c.questionIds || []).length || c.questionCount || 0,
+      participantsCount: c.participantIds?.length || c.participantsCount || 0,
+      startTime: c.startTime,
+      endTime: c.endTime,
+      isPublished: c.isPublished,
+      leaderboardVisible: c.leaderboardVisible,
+    }));
+
+    const selectedContest = selectedContextId ? mockContests.find((c) => c.id === selectedContextId || c.code === selectedContextId) : null;
+
+    let students = mockUsers.filter((u) => u.role === 'STUDENT' && u.approved);
+
+    if (selectedContest && selectedContest.participantIds && selectedContest.participantIds.length > 0) {
+      const partSet = new Set(selectedContest.participantIds);
+      const filtered = students.filter((s) => partSet.has(s.id));
+      if (filtered.length > 0) students = filtered;
+    }
+
+    const rankedList = students.map((stu, idx) => {
+      let score = stu.score || (72 - idx) * 15;
+      let solved = stu.solvedCount || Math.max(0, Math.floor((72 - idx) / 7));
+      let attempts = stu.attemptsCount || (stu.solvedCount || 1) * 2;
+      let highestDiff = stu.highestDifficulty || 5;
+
+      if (selectedContest) {
+        const qCount = (selectedContest.questionIds || []).length || 5;
+        const ratio = Math.min(1, Math.max(0.2, (stu.solvedCount || 1) / 10));
+        solved = Math.min(qCount, Math.round(qCount * ratio));
+        attempts = solved * 2 + (idx % 2);
+        score = solved * 40 + (highestDiff * 10) - (attempts * 2);
+        highestDiff = Math.min(10, Math.max(1, ((idx % 5) + 3)));
+      }
+
+      const avgTime = (5 + (idx % 6) * 1.2).toFixed(1);
+
+      return {
         id: stu.id,
         studentId: stu.id,
         name: stu.name,
@@ -1784,23 +1944,43 @@ export function handleMockFallback(method: string, endpoint: string, body?: any,
         email: stu.email,
         studentEmail: stu.email,
         department: stu.department || 'Computer Science',
-        score: stu.score || (72 - idx) * 15,
-        solved: stu.solvedCount || Math.max(0, Math.floor((72 - idx) / 7)),
-        solvedCount: stu.solvedCount || Math.max(0, Math.floor((72 - idx) / 7)),
-        attempts: stu.attemptsCount || (stu.solvedCount || 1) * 2,
-        attemptsCount: stu.attemptsCount || (stu.solvedCount || 1) * 2,
+        score: Math.max(0, score),
+        solved,
+        solvedCount: solved,
+        attempts,
+        attemptsCount: attempts,
         skipped: stu.skippedCount || (idx % 3 === 0 ? 1 : 0),
         skippedCount: stu.skippedCount || (idx % 3 === 0 ? 1 : 0),
-        currentDifficulty: stu.currentDifficulty || 4,
-        highestDifficulty: stu.highestDifficulty || 5,
-        averageSolvingTime: `${(6 + (idx % 6) * 1.2).toFixed(1)} min`,
-        averageTimeMinutes: (6 + (idx % 6) * 1.2).toFixed(1),
+        currentDifficulty: highestDiff,
+        highestDifficulty: highestDiff,
+        averageSolvingTime: `${avgTime} min`,
+        averageTimeMinutes: avgTime,
         lastSubmission: new Date(Date.now() - (idx * 180000)).toISOString(),
+        lastSubmissionTime: new Date(Date.now() - (idx * 180000)).toISOString(),
         sessionStatus: stu.sessionStatus || 'ACTIVE',
+        isOnline: stu.sessionStatus === 'ACTIVE',
         isAssignedToFaculty: idx < 35,
         isCurrentStudent: stu.id === 'usr_stu_3',
-      }));
-    return { success: true, count: students.length, data: students };
+        contextId: selectedContest?.id || 'ALL',
+        contextName: selectedContest?.name || 'All Contexts',
+      };
+    })
+    .sort((a, b) => b.score - a.score || b.solved - a.solved || a.attempts - b.attempts)
+    .map((item, idx) => ({
+      ...item,
+      rank: idx + 1,
+    }));
+
+    return {
+      success: true,
+      count: rankedList.length,
+      data: rankedList,
+      contexts,
+      filterMeta: {
+        contexts,
+        contests: contexts,
+      },
+    };
   }
 
   // 6. Faculty Dashboard Endpoints
@@ -2155,6 +2335,14 @@ export function handleMockFallback(method: string, endpoint: string, body?: any,
 
     let filtered = [...mockQuestions];
 
+    const contextId = params?.contextId || params?.contestId;
+    if (contextId && contextId !== 'ALL' && contextId !== 'all') {
+      const contest = mockContests.find((c) => c.id === contextId);
+      if (contest && Array.isArray(contest.questionIds)) {
+        filtered = filtered.filter((item) => contest.questionIds.includes(item.id));
+      }
+    }
+
     const searchVal = params?.search || params?.q;
     if (searchVal) {
       const q = String(searchVal).toLowerCase().trim();
@@ -2258,6 +2446,14 @@ export function handleMockFallback(method: string, endpoint: string, body?: any,
       anomalyStatus: idx === 12 ? 'HIGH' : idx === 2 ? 'MEDIUM' : 'NORMAL',
       lastActivity: new Date(Date.now() - (idx * 30000)).toISOString()
     }));
+
+    const contextId = params?.contextId || params?.contestId;
+    if (contextId && contextId !== 'ALL' && contextId !== 'all') {
+      const contest = mockContests.find((c) => c.id === contextId);
+      if (contest && Array.isArray(contest.participantIds)) {
+        sessions = sessions.filter((s) => contest.participantIds.includes(s.studentId));
+      }
+    }
 
     const searchVal = params?.search || params?.q;
     if (searchVal) {
@@ -2366,6 +2562,16 @@ export function handleMockFallback(method: string, endpoint: string, body?: any,
         compilerOutput: isAccepted ? 'Compilation successful. All 6 test cases passed.' : 'Wrong answer on testcase 3'
       };
     });
+
+    const contextId = params?.contextId || params?.contestId;
+    if (contextId && contextId !== 'ALL' && contextId !== 'all') {
+      const contest = mockContests.find((c) => c.id === contextId);
+      if (contest) {
+        const qIds = Array.isArray(contest.questionIds) ? contest.questionIds : [];
+        const pIds = Array.isArray(contest.participantIds) ? contest.participantIds : [];
+        subs = subs.filter((s) => qIds.includes(s.questionId) || pIds.includes(s.studentId));
+      }
+    }
 
     const searchVal = params?.search || params?.q;
     if (searchVal) {
@@ -2701,7 +2907,20 @@ export function handleMockFallback(method: string, endpoint: string, body?: any,
       return { success: true, message: 'Test case created successfully', data: newTc };
     }
     const qId = params?.questionId || body?.questionId;
-    const filtered = qId && qId !== 'ALL' ? mockTestCases.filter((tc) => tc.questionId === qId) : mockTestCases;
+    const contextId = params?.contextId || params?.contestId;
+    let filtered = [...mockTestCases];
+
+    if (contextId && contextId !== 'ALL' && contextId !== 'all') {
+      const contest = mockContests.find((c) => c.id === contextId);
+      if (contest && Array.isArray(contest.questionIds)) {
+        filtered = filtered.filter((tc) => contest.questionIds.includes(tc.questionId));
+      }
+    }
+
+    if (qId && qId !== 'ALL') {
+      filtered = filtered.filter((tc) => tc.questionId === qId);
+    }
+
     return { success: true, count: filtered.length, data: filtered };
   }
 
@@ -3124,6 +3343,18 @@ export function handleMockFallback(method: string, endpoint: string, body?: any,
         createdBy: 'Admin Director',
         createdAt: new Date().toISOString(),
         participantsCount: 0,
+        assignedFacultyIds: Array.isArray(body?.assignedFacultyIds) ? body.assignedFacultyIds : [],
+        assignedFaculty: Array.isArray(body?.assignedFacultyIds)
+          ? mockUsers
+              .filter((u) => body.assignedFacultyIds.includes(u.id) && (u.role === 'FACULTY' || u.role === 'ADMIN'))
+              .map((u) => ({
+                id: u.id,
+                name: u.name,
+                email: u.email,
+                department: u.department || 'Computer Science & Engineering',
+                employeeId: u.employeeId || `FAC-${u.id.replace('usr_fac_', '')}`,
+              }))
+          : [],
       };
       mockContests.push(newContest);
       return { success: true, message: 'Contest created successfully', data: newContest };
@@ -3229,6 +3460,62 @@ export function handleMockFallback(method: string, endpoint: string, body?: any,
       };
     }
 
+    // Assign Faculty to Contest Endpoint
+    if (subRoute === 'assign-faculty') {
+      let facultyIds: string[] = [];
+      if (Array.isArray(body?.facultyIds)) {
+        facultyIds = body.facultyIds;
+      } else if (body?.facultyId) {
+        facultyIds = [body.facultyId];
+      }
+      contest.assignedFacultyIds = facultyIds;
+      contest.assignedFaculty = mockUsers
+        .filter((u) => facultyIds.includes(u.id) && (u.role === 'FACULTY' || u.role === 'ADMIN'))
+        .map((u) => ({
+          id: u.id,
+          name: u.name,
+          email: u.email,
+          department: u.department || 'Computer Science & Engineering',
+          employeeId: u.employeeId || `FAC-${u.id.replace('usr_fac_', '')}`,
+        }));
+
+      const facultyNames = contest.assignedFaculty.map((f: any) => f.name).join(', ') || 'None';
+      mockAuditLogs.unshift({
+        id: `aud_${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        userId: 'usr_admin_1',
+        userName: 'Admin Director',
+        role: 'ADMIN',
+        action: 'FACULTY_ASSIGNED_CONTEST',
+        details: `Assigned faculty [${facultyNames}] to contest: ${contest.name}`,
+        ipAddress: '127.0.0.1',
+        sessionId: 'sess_admin_master',
+        result: 'SUCCESS',
+      });
+
+      return {
+        success: true,
+        message: `Faculty supervisors updated for "${contest.name}"`,
+        data: {
+          contestId: contest.id,
+          assignedFacultyIds: contest.assignedFacultyIds,
+          assignedFaculty: contest.assignedFaculty,
+        },
+      };
+    }
+
+    // Publish & Unpublish Endpoints
+    if (subRoute === 'publish') {
+      contest.isPublished = true;
+      if (contest.status === 'DRAFT') contest.status = 'SCHEDULED';
+      return { success: true, message: `Contest "${contest.name}" published successfully`, data: contest };
+    }
+    if (subRoute === 'unpublish') {
+      contest.isPublished = false;
+      if (contest.status === 'SCHEDULED') contest.status = 'DRAFT';
+      return { success: true, message: `Contest "${contest.name}" unpublished and returned to draft`, data: contest };
+    }
+
     // Lifecycle Actions
     if (subRoute === 'start') {
       contest.status = 'ACTIVE';
@@ -3258,6 +3545,18 @@ export function handleMockFallback(method: string, endpoint: string, body?: any,
 
     if (method === 'PUT') {
       Object.assign(contest, body);
+      if (Array.isArray(body?.assignedFacultyIds)) {
+        contest.assignedFacultyIds = body.assignedFacultyIds;
+        contest.assignedFaculty = mockUsers
+          .filter((u) => body.assignedFacultyIds.includes(u.id) && (u.role === 'FACULTY' || u.role === 'ADMIN'))
+          .map((u) => ({
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            department: u.department || 'Computer Science & Engineering',
+            employeeId: u.employeeId || `FAC-${u.id.replace('usr_fac_', '')}`,
+          }));
+      }
       if (Array.isArray(contest.questionIds)) contest.questionCount = contest.questionIds.length;
       return { success: true, message: 'Contest updated successfully', data: contest };
     }

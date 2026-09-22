@@ -144,17 +144,19 @@ export default function Reports() {
 
   // Export handlers
   const handleExportCSV = () => {
-    if (!reportData || reportData.length === 0) {
+    const dataToExport = filteredRows && filteredRows.length > 0 ? filteredRows : reportData;
+    if (!dataToExport || dataToExport.length === 0) {
       toast.warning('No report data available to export');
       return;
     }
-    const filename = `hackathon_${reportType}_report_${new Date().toISOString().split('T')[0]}`;
-    exportJsonToCsv(filename, reportData);
-    toast.success(`${reportType.toUpperCase()} CSV report downloaded successfully`, 'Export Complete');
+    const filename = `Hackathon_Arena_${reportType.toUpperCase()}_Report`;
+    exportJsonToCsv(filename, dataToExport);
+    toast.success(`Exported ${dataToExport.length} ${reportType.toUpperCase()} report records to CSV`, 'Export Complete');
   };
 
   const handleExportJSON = () => {
-    if (!reportData || reportData.length === 0) {
+    const dataToExport = filteredRows && filteredRows.length > 0 ? filteredRows : reportData;
+    if (!dataToExport || dataToExport.length === 0) {
       toast.warning('No report data available to export');
       return;
     }
@@ -163,15 +165,24 @@ export default function Reports() {
       type: reportType,
       exportedAt: new Date().toISOString(),
       summary: summaryData,
-      totalRecords: reportData.length,
-      records: reportData,
+      totalRecords: dataToExport.length,
+      records: dataToExport,
     };
     const jsonStr = JSON.stringify(exportPayload, null, 2);
-    downloadFile(jsonStr, `hackathon_${reportType}_report_${new Date().toISOString().split('T')[0]}.json`, 'application/json');
+    downloadFile(jsonStr, `Hackathon_Arena_${reportType.toUpperCase()}_Report_${new Date().toISOString().split('T')[0]}.json`, 'application/json');
     toast.success('JSON Report dataset exported successfully', 'Export Complete');
   };
 
   const handlePrint = () => {
+    if (loading || generating) {
+      toast.warning('Report dataset is currently loading. Please wait.');
+      return;
+    }
+    const dataToPrint = filteredRows && filteredRows.length > 0 ? filteredRows : reportData;
+    if (!dataToPrint || dataToPrint.length === 0) {
+      toast.warning('No report data available to print');
+      return;
+    }
     window.print();
   };
 
@@ -208,11 +219,11 @@ export default function Reports() {
       if (title) setReportTitle(title);
 
       if (modalFormat === 'csv' && rows.length > 0) {
-        exportJsonToCsv(`hackathon_${modalType}_report`, rows);
+        exportJsonToCsv(`Hackathon_Arena_${modalType.toUpperCase()}_Report`, rows);
         toast.success(`${modalType.toUpperCase()} Report generated and CSV downloaded!`, 'Report Ready');
       } else if (modalFormat === 'json' && rows.length > 0) {
         const jsonStr = JSON.stringify({ title, type: modalType, summary, records: rows }, null, 2);
-        downloadFile(jsonStr, `hackathon_${modalType}_report.json`, 'application/json');
+        downloadFile(jsonStr, `Hackathon_Arena_${modalType.toUpperCase()}_Report_${new Date().toISOString().split('T')[0]}.json`, 'application/json');
         toast.success(`${modalType.toUpperCase()} Report generated and JSON downloaded!`, 'Report Ready');
       } else {
         toast.success(`${title || modalType.toUpperCase()} report generated successfully!`, 'Report Ready');
@@ -563,22 +574,22 @@ export default function Reports() {
             <p className="text-xs text-slate-500 mt-1">Try clearing active search filters or selecting another report category.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-slate-800">
-            <table className="w-full text-left text-xs text-slate-300">
-              <thead className="bg-slate-800/90 text-[11px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-700">
+          <div className="overflow-x-auto rounded-xl border border-slate-800 print:overflow-visible print:border-slate-300">
+            <table className="w-full text-left text-xs text-slate-300 print:text-slate-900">
+              <thead className="bg-slate-800/90 text-[11px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-700 print:bg-slate-100 print:text-slate-900 print:border-slate-300">
                 <tr>
                   {Object.keys(filteredRows[0]).map((col) => (
-                    <th key={col} className="p-3.5 font-semibold text-slate-300 whitespace-nowrap">
+                    <th key={col} className="p-3.5 font-semibold text-slate-300 whitespace-nowrap print:whitespace-normal print:p-2 print:text-slate-900 print:border print:border-slate-300">
                       {col.replace(/([A-Z])/g, ' $1').trim()}
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/70">
+              <tbody className="divide-y divide-slate-800/70 print:divide-slate-300">
                 {filteredRows.map((row, idx) => (
-                  <tr key={idx} className="hover:bg-slate-800/50 transition-colors">
+                  <tr key={idx} className="hover:bg-slate-800/50 transition-colors print:hover:bg-transparent">
                     {Object.entries(row).map(([key, val]: any, cIdx) => (
-                      <td key={cIdx} className="p-3.5 font-medium whitespace-nowrap">
+                      <td key={cIdx} className="p-3.5 font-medium whitespace-nowrap print:whitespace-normal print:p-2 print:text-slate-900 print:border print:border-slate-300">
                         {renderCellContent(key, val)}
                       </td>
                     ))}

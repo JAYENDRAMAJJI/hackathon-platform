@@ -34,8 +34,6 @@ import {
   Search,
   Maximize2,
   Minimize2,
-  Sun,
-  Moon,
   Wifi,
   Sparkles,
   ExternalLink,
@@ -84,7 +82,6 @@ export function AdminLayout() {
 
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [notifDropdownOpen, setNotifDropdownOpen] = useState(false);
   const [recentNotifs, setRecentNotifs] = useState<Notification[]>([]);
@@ -166,18 +163,6 @@ export function AdminLayout() {
     }
   };
 
-  const toggleDarkMode = () => {
-    setIsDarkMode((prev) => {
-      const next = !prev;
-      if (next) {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
-      return next;
-    });
-  };
-
   const handleLogout = () => {
     logout();
     navigate('/login');
@@ -214,11 +199,11 @@ export function AdminLayout() {
           subItems: [
             { label: 'Contest Overview', path: '/admin/contests', icon: Trophy },
             { label: 'Create Contest', path: '/admin/contests/create', icon: PlusCircle },
-            { label: 'Question Bank', path: '/admin/questions', icon: Code2 },
-            { label: 'Test Cases', path: '/admin/test-cases', icon: CheckSquare },
-            { label: 'Live Sessions', path: '/admin/live-sessions', icon: Activity, badgeKey: 'activeSessions' },
-            { label: 'Submissions', path: '/admin/submissions', icon: FileCode },
-            { label: 'Leaderboard', path: '/admin/leaderboard', icon: Award },
+            { label: 'Question Manager', path: '/admin/questions', icon: Code2 },
+            { label: 'Test Validator', path: '/admin/test-cases', icon: CheckSquare },
+            { label: 'Live Monitor', path: '/admin/live-sessions', icon: Activity, badgeKey: 'activeSessions' },
+            { label: 'Submission Tracker', path: '/admin/submissions', icon: FileCode },
+            { label: 'Contest Rankings', path: '/admin/leaderboard', icon: Award },
           ],
         },
       ],
@@ -230,7 +215,7 @@ export function AdminLayout() {
           label: 'Live Monitoring',
           icon: Activity,
           subItems: [
-            { label: 'Active Sessions', path: '/admin/live-sessions', icon: Activity, badgeKey: 'activeSessions' },
+            { label: 'Live Monitor', path: '/admin/live-sessions', icon: Activity, badgeKey: 'activeSessions' },
             { label: 'Anomalies', path: '/admin/anomalies', icon: AlertTriangle, badgeKey: 'activeAnomalies' },
             { label: 'Activity Logs', path: '/admin/activity', icon: History },
           ],
@@ -319,10 +304,20 @@ export function AdminLayout() {
   const getBreadcrumbs = () => {
     const parts = location.pathname.split('/').filter(Boolean);
     if (parts.length <= 1) return [{ label: 'Dashboard', path: '/admin/dashboard' }];
+
+    const breadcrumbLabelMap: Record<string, string> = {
+      'questions': 'Question Manager',
+      'test-cases': 'Test Validator',
+      'live-sessions': 'Live Monitor',
+      'live-monitoring': 'Live Monitor',
+      'submissions': 'Submission Tracker',
+      'leaderboard': 'Contest Rankings',
+    };
     
     return parts.map((part, index) => {
       const url = '/' + parts.slice(0, index + 1).join('/');
-      const label = part.charAt(0).toUpperCase() + part.slice(1).replace(/-/g, ' ');
+      const key = part.toLowerCase();
+      const label = breadcrumbLabelMap[key] || (part.charAt(0).toUpperCase() + part.slice(1).replace(/-/g, ' '));
       return { label, path: url };
     });
   };
@@ -331,23 +326,23 @@ export function AdminLayout() {
   const currentTitle = breadcrumbs[breadcrumbs.length - 1]?.label || 'Dashboard';
 
   return (
-    <div className={`min-h-screen flex bg-slate-900 text-slate-100 ${isDarkMode ? 'dark bg-slate-950' : 'bg-slate-900'}`}>
-      {/* Mobile Drawer Backdrop */}
+    <div className="flex h-screen bg-slate-950 font-sans text-slate-100 overflow-hidden print:h-auto print:overflow-visible print:bg-white print:text-slate-900">
+      {/* Mobile Sidebar Backdrop */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden print:hidden"
           onClick={() => setMobileOpen(false)}
         />
       )}
 
       {/* SIDEBAR */}
       <aside
-        className={`fixed lg:static inset-y-0 left-0 z-50 flex flex-col bg-slate-900 border-r border-slate-800 transition-all duration-300 ease-in-out shadow-2xl lg:shadow-none ${
+        className={`fixed lg:static inset-y-0 left-0 z-50 flex flex-col bg-slate-900 border-r border-slate-800 transition-all duration-300 ease-in-out shadow-2xl lg:shadow-none shrink-0 print:hidden ${
           collapsed ? 'w-20' : 'w-72'
         } ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
       >
         {/* Brand Header */}
-        <div className="h-16 flex items-center justify-between px-5 border-b border-slate-800 bg-slate-900/90 backdrop-blur-md">
+        <div className="h-16 flex items-center justify-between px-4 border-b border-slate-800 bg-slate-900/90 backdrop-blur-md">
           <Logo
             size="md"
             collapsed={collapsed}
@@ -356,7 +351,7 @@ export function AdminLayout() {
           />
           <button
             onClick={() => setMobileOpen(false)}
-            className="lg:hidden text-slate-400 hover:text-white p-1"
+            className="lg:hidden text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -502,9 +497,9 @@ export function AdminLayout() {
       </aside>
 
       {/* MAIN CONTENT WRAPPER */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-900 text-slate-100">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-900 text-slate-100 print:overflow-visible print:h-auto print:bg-white print:text-slate-900">
         {/* TOP COMMON HEADER */}
-        <header className="h-16 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 flex items-center justify-between px-4 lg:px-8 z-30 sticky top-0">
+        <header className="h-16 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 flex items-center justify-between px-4 lg:px-8 z-30 sticky top-0 print:hidden">
           {/* Left: Sidebar Toggle, Title, Breadcrumbs */}
           <div className="flex items-center gap-4 min-w-0">
             <button
@@ -569,15 +564,6 @@ export function AdminLayout() {
               title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
             >
               {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-            </button>
-
-            {/* Theme Switcher */}
-            <button
-              onClick={toggleDarkMode}
-              className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-              title="Toggle theme"
-            >
-              {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-300" />}
             </button>
 
             {/* Notification Bell with Preview */}
@@ -688,7 +674,7 @@ export function AdminLayout() {
         </header>
 
         {/* Page Content Container */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-slate-900 text-slate-100">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-slate-900 text-slate-100 print:p-0 print:overflow-visible print:h-auto print:bg-white print:text-slate-900">
           <Outlet />
         </main>
       </div>

@@ -54,17 +54,20 @@ export default function PerformanceAnalytics() {
   const charts = data?.charts;
 
   const handleExportCSV = () => {
-    if (!metrics) return;
+    if (!metrics) {
+      showToast('warning', 'No performance analytics data available to export');
+      return;
+    }
     const exportData = [
-      { Metric: 'Average Student Score', Value: `${metrics.averageStudentScore} pts` },
-      { Metric: 'Average Solving Time', Value: metrics.averageSolvingTime },
-      { Metric: 'Overall Success Rate', Value: `${metrics.successRate}%` },
-      { Metric: 'Total Questions Solved', Value: metrics.totalSolved },
-      { Metric: 'Total Attempts Evaluated', Value: metrics.totalAttempts },
-      { Metric: 'Total Skips', Value: metrics.totalSkips },
+      { 'Metric': 'Average Student Score', 'Value': `${metrics.averageStudentScore} pts` },
+      { 'Metric': 'Average Solving Time', 'Value': metrics.averageSolvingTime },
+      { 'Metric': 'Overall Success Rate', 'Value': `${metrics.successRate}%` },
+      { 'Metric': 'Total Questions Solved', 'Value': metrics.totalSolved },
+      { 'Metric': 'Total Attempts Evaluated', 'Value': metrics.totalAttempts },
+      { 'Metric': 'Total Skips', 'Value': metrics.totalSkips },
     ];
-    exportToCSV(exportData, `Cohort_Performance_Analytics_${new Date().toISOString().slice(0, 10)}.csv`);
-    showToast('success', 'Performance analytics exported to CSV');
+    exportToCSV('Hackathon_Arena_Cohort_Performance_Analytics', exportData);
+    showToast('success', 'Cohort performance analytics exported to CSV');
   };
 
   return (

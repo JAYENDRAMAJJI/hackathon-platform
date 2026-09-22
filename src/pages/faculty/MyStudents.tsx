@@ -22,10 +22,9 @@ import {
 import { Card, CardContent } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
-import { Input } from '../../components/ui/Input';
 import { apiClient } from '../../lib/api';
 import { User } from '../../types/admin';
-import { exportToCSV } from '../../lib/exportUtils';
+import { exportToCSV, formatDate } from '../../lib/exportUtils';
 import { useToast } from '../../context/AdminToastContext';
 
 export default function MyStudents() {
@@ -101,30 +100,30 @@ export default function MyStudents() {
   };
 
   const handleExport = () => {
-    if (students.length === 0) {
+    if (!students || students.length === 0) {
       showToast('warning', 'No students to export');
       return;
     }
 
     const exportData = students.map((s) => ({
       'Student ID': s.id,
-      Name: s.name,
-      Email: s.email,
-      Department: s.department || 'Computer Science',
-      Status: s.status,
-      'Session Status': s.sessionStatus,
-      Score: s.score || 0,
-      Rank: s.rank || '-',
-      'Current Level': s.currentDifficulty || 1,
-      'Highest Level': s.highestDifficulty || 1,
-      Solved: s.solvedCount || 0,
-      Attempts: s.attemptsCount || 0,
-      Skipped: s.skippedCount || 0,
-      'Last Login': s.lastLogin,
+      'Full Name': s.name,
+      'Email Address': s.email,
+      'Department': s.department || 'Computer Science & Engineering',
+      'Account Status': s.status === 'ACTIVE' ? 'Active' : s.status === 'PENDING' ? 'Pending Approval' : s.status === 'SUSPENDED' ? 'Suspended' : s.status || 'Active',
+      'Session Status': s.sessionStatus || 'OFFLINE',
+      'Contest Score': s.score ?? 0,
+      'Rank': s.rank ?? 'Unranked',
+      'Current Level': s.currentDifficulty ? `Level ${s.currentDifficulty}` : 'Level 1',
+      'Highest Level Reached': s.highestDifficulty ? `Level ${s.highestDifficulty}` : 'Level 1',
+      'Problems Solved': s.solvedCount ?? 0,
+      'Total Attempts': s.attemptsCount ?? 0,
+      'Problems Skipped': s.skippedCount ?? 0,
+      'Last Login': formatDate(s.lastLogin),
     }));
 
-    exportToCSV(exportData, `assigned_students_supervision_${new Date().toISOString().split('T')[0]}`);
-    showToast('success', 'Assigned students exported to CSV');
+    exportToCSV('Hackathon_Arena_Supervised_Students', exportData);
+    showToast('success', `Exported ${exportData.length} supervised student records to CSV`);
   };
 
   // Paginated records
@@ -401,7 +400,7 @@ export default function MyStudents() {
                         </button>
                         <button
                           onClick={() => navigate(`/faculty/live-sessions/sess_${student.id}`)}
-                          title="Live Session Monitor"
+                          title="Live Monitor"
                           className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-all shadow-xs"
                         >
                           <Activity className="w-3.5 h-3.5 text-emerald-400" />

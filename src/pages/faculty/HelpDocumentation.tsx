@@ -45,7 +45,7 @@ export default function HelpDocumentation() {
     },
     {
       id: 'monitoring',
-      title: 'Live Session Monitoring Guide',
+      title: 'Live Monitor Guide',
       icon: Activity,
       content: (
         <div className="space-y-4 text-xs text-slate-300 leading-relaxed">

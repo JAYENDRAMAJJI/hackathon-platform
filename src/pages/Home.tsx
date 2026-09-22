@@ -41,7 +41,7 @@ export default function Home() {
   const faqs = [
     {
       q: 'What programming language is supported?',
-      a: 'Kotlin 2.0 is supported in Phase 1 of the platform. Participants write idiomatic Kotlin solutions evaluated server-side with strict memory and time constraints.',
+      a: 'Kotlin 2.0 is supported across the platform. Participants write idiomatic Kotlin solutions evaluated server-side with strict memory and time constraints.',
     },
     {
       q: 'How do students access the contest?',
@@ -822,7 +822,7 @@ export default function Home() {
           <div className="space-y-3 md:col-span-1">
             <Logo size="md" />
             <p className="text-[11px] text-slate-400">
-              {BRAND_CONFIG.phase}
+              {BRAND_CONFIG.tagline}
             </p>
           </div>
 

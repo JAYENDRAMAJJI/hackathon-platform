@@ -87,16 +87,39 @@ export default function FacultyReports() {
       toast.warning('No report rows to export');
       return;
     }
-    exportToCSV(rows, `${reportType}_supervisory_report_${new Date().toISOString().split('T')[0]}`);
-    toast.success('Report CSV downloaded successfully', 'Export Complete');
+    const filename = `Hackathon_Arena_${reportType.toUpperCase()}_Supervisory_Report`;
+    exportToCSV(filename, rows);
+    toast.success(`Exported ${rows.length} ${reportType.toUpperCase()} report records to CSV`, 'Export Complete');
   };
 
   const handlePrint = () => {
+    if (loading) {
+      toast.warning('Report preview is currently loading. Please wait.');
+      return;
+    }
+    const rows = reportData?.rows || (Array.isArray(reportData) ? reportData : []);
+    if (!rows || rows.length === 0) {
+      toast.warning('No report data available to print');
+      return;
+    }
     window.print();
   };
 
   return (
-    <div className="space-y-6 print:p-0">
+    <div className="space-y-6 print:p-0 print:bg-white print:text-slate-900">
+      {/* Printable Official Institutional Header (Only in print) */}
+      <div className="hidden print:block mb-6 border-b-2 border-slate-900 pb-4">
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-xl font-black text-slate-900 tracking-tight">HACKATHON ARENA 2.0</h1>
+            <p className="text-xs text-slate-600 font-semibold uppercase tracking-wider">Faculty Supervisory Assessment Report</p>
+          </div>
+          <div className="text-right text-xs text-slate-600 font-mono">
+            <p>Printed: {new Date().toLocaleString()}</p>
+            <p>Supervisory Verification Record</p>
+          </div>
+        </div>
+      </div>
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:hidden">
         <div>
@@ -238,24 +261,24 @@ export default function FacultyReports() {
             )}
 
             {/* Tabular Data View */}
-            <div className="overflow-x-auto border border-slate-800 rounded-xl">
-              <table className="w-full text-xs text-left">
-                <thead className="bg-slate-800/90 text-slate-200 uppercase font-bold tracking-wider border-b border-slate-700">
+            <div className="overflow-x-auto border border-slate-800 rounded-xl print:overflow-visible print:border-slate-300">
+              <table className="w-full text-xs text-left print:text-slate-900">
+                <thead className="bg-slate-800/90 text-slate-200 uppercase font-bold tracking-wider border-b border-slate-700 print:bg-slate-100 print:text-slate-900 print:border-slate-300">
                   <tr>
                     {reportData.rows.length > 0 &&
                       Object.keys(reportData.rows[0]).map((col) => (
-                        <th key={col} className="px-4 py-3.5">
+                        <th key={col} className="px-4 py-3.5 print:p-2 print:border print:border-slate-300">
                           {col.replace(/([A-Z])/g, ' $1')}
                         </th>
                       ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60">
+                <tbody className="divide-y divide-slate-800/60 print:divide-slate-300">
                   {reportData.rows.length > 0 ? (
                     reportData.rows.map((row: any, rIdx: number) => (
-                      <tr key={rIdx} className="hover:bg-slate-800/50 transition-colors">
+                      <tr key={rIdx} className="hover:bg-slate-800/50 transition-colors print:hover:bg-transparent">
                         {Object.values(row).map((val: any, cIdx: number) => (
-                          <td key={cIdx} className="px-4 py-3.5 font-medium text-slate-300">
+                          <td key={cIdx} className="px-4 py-3.5 font-medium text-slate-300 print:p-2 print:text-slate-900 print:border print:border-slate-300">
                             {typeof val === 'boolean' ? (
                               val ? (
                                 <span className="text-emerald-400 font-bold">YES</span>

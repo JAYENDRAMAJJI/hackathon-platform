@@ -22,8 +22,6 @@ import {
   Search,
   Maximize2,
   Minimize2,
-  Sun,
-  Moon,
   Wifi,
   Sparkles,
   ExternalLink,
@@ -77,7 +75,6 @@ export function FacultyLayout() {
   const [connectionStatus, setConnectionStatus] = useState<'CONNECTED' | 'RECONNECTING' | 'DISCONNECTED'>('CONNECTED');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [notifDropdownOpen, setNotifDropdownOpen] = useState(false);
   const [recentNotifs, setRecentNotifs] = useState<Notification[]>([]);
@@ -232,19 +229,6 @@ export function FacultyLayout() {
         setIsFullscreen(false);
       }
     }
-  };
-
-  // Toggle Dark Mode
-  const toggleDarkMode = () => {
-    setIsDarkMode((prev) => {
-      const next = !prev;
-      if (next) {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
-      return next;
-    });
   };
 
   const handleLogoutConfirm = async () => {
@@ -468,7 +452,7 @@ export function FacultyLayout() {
   };
 
   return (
-    <div className="flex h-screen w-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-hidden font-sans transition-colors duration-200">
+    <div className="flex h-screen w-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-hidden font-sans transition-colors duration-200 print:h-auto print:overflow-visible print:bg-white print:text-slate-900">
       {/* Search Modal */}
       <FacultySearchModal isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
 
@@ -486,14 +470,14 @@ export function FacultyLayout() {
       {/* Mobile Drawer Backdrop */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-sm lg:hidden animate-in fade-in"
+          className="fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-sm lg:hidden animate-in fade-in print:hidden"
           onClick={() => setMobileOpen(false)}
         />
       )}
 
       {/* Sidebar */}
       <aside
-        className={`fixed lg:static inset-y-0 left-0 z-50 flex flex-col bg-slate-900 dark:bg-slate-950 text-slate-300 border-r border-slate-800 transition-all duration-300 ease-in-out ${
+        className={`fixed lg:static inset-y-0 left-0 z-50 flex flex-col bg-slate-900 dark:bg-slate-950 text-slate-300 border-r border-slate-800 transition-all duration-300 ease-in-out shrink-0 print:hidden ${
           collapsed ? 'w-20' : 'w-72'
         } ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
       >
@@ -659,9 +643,9 @@ export function FacultyLayout() {
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden print:overflow-visible print:h-auto print:bg-white print:text-slate-900">
         {/* Top Navbar */}
-        <header className="h-16 flex-shrink-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-4 sm:px-6 z-30">
+        <header className="h-16 flex-shrink-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-4 sm:px-6 z-30 print:hidden">
           {/* Left: Mobile hamburger & breadcrumbs */}
           <div className="flex items-center gap-3">
             <button
@@ -741,15 +725,6 @@ export function FacultyLayout() {
               <kbd className="hidden lg:inline-block px-1.5 py-0.5 text-[10px] font-semibold bg-white dark:bg-slate-900 text-slate-400 rounded border border-slate-300 dark:border-slate-700 shadow-xs">
                 Ctrl K
               </kbd>
-            </button>
-
-            {/* Dark / Light Toggle */}
-            <button
-              onClick={toggleDarkMode}
-              className="p-2 rounded-xl text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-              title={isDarkMode ? 'Light Mode' : 'Dark Mode'}
-            >
-              {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
             </button>
 
             {/* Fullscreen Toggle */}
@@ -881,8 +856,8 @@ export function FacultyLayout() {
         </header>
 
         {/* Page Content Outlet */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-slate-50 dark:bg-slate-950">
-          <div className="max-w-7xl mx-auto space-y-6">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-slate-50 dark:bg-slate-950 print:p-0 print:overflow-visible print:h-auto print:bg-white print:text-slate-900">
+          <div className="max-w-7xl mx-auto space-y-6 print:max-w-none print:space-y-4">
             <Outlet />
           </div>
         </main>

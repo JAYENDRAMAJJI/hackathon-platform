@@ -21,14 +21,20 @@ import { apiClient } from '../../lib/api';
 import { Submission, SubmissionResult } from '../../types/admin';
 import { formatDate, exportJsonToCsv } from '../../lib/exportUtils';
 import { useToast } from '../../context/AdminToastContext';
+import { useAuthStore } from '../../store/authStore';
+import ContextSelector from '../../components/ContextSelector';
 
 export default function Submissions() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { user } = useAuthStore();
+  const isAdmin = user?.role === 'ADMIN';
+
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [resultFilter, setResultFilter] = useState('ALL');
   const [difficultyFilter, setDifficultyFilter] = useState('ALL');
+  const [contextFilter, setContextFilter] = useState(searchParams.get('contextId') || 'ALL');
 
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
 
@@ -41,6 +47,12 @@ export default function Submissions() {
       if (search) params.search = search;
       if (resultFilter !== 'ALL') params.result = resultFilter;
       if (difficultyFilter !== 'ALL') params.difficulty = Number(difficultyFilter);
+      if (contextFilter !== 'ALL') params.contextId = contextFilter;
+
+      // Sync URL
+      const newUrlParams = new URLSearchParams();
+      if (contextFilter !== 'ALL') newUrlParams.set('contextId', contextFilter);
+      setSearchParams(newUrlParams, { replace: true });
 
       const resp = await apiClient.get('/admin/submissions', params);
       if (resp.success && resp.data) {
@@ -58,23 +70,33 @@ export default function Submissions() {
       fetchSubmissions();
     }, 250);
     return () => clearTimeout(timer);
-  }, [search, resultFilter, difficultyFilter]);
+  }, [search, resultFilter, difficultyFilter, contextFilter]);
 
   const handleExportCSV = () => {
-    exportJsonToCsv('contest_submissions_audit', submissions, {
-      id: 'Submission ID',
-      studentName: 'Student',
-      questionTitle: 'Problem',
-      difficulty: 'Level',
-      result: 'Result',
-      executionTimeMs: 'Execution Time (ms)',
-      memoryUsedMb: 'Memory',
-      testCasesPassed: 'Passed Cases',
-      totalTestCases: 'Total Cases',
-      scoreAwarded: 'Score Awarded',
-      submittedAt: 'Timestamp',
-    });
-    toast.success('Submissions log exported to CSV');
+    if (!submissions || submissions.length === 0) {
+      toast.warning('No submission records available to export');
+      return;
+    }
+
+    const exportData = submissions.map((s) => ({
+      'Submission ID': s.id,
+      'Student ID': s.studentId,
+      'Student Name': s.studentName,
+      'Problem Title': s.questionTitle,
+      'Difficulty Level': `Level ${s.difficulty}`,
+      'Result': s.result,
+      'Execution Time (ms)': s.executionTimeMs,
+      'Memory Used': s.memoryUsedMb,
+      'Passed Test Cases': s.testCasesPassed,
+      'Total Test Cases': s.totalTestCases,
+      'Score Awarded': s.scoreAwarded,
+      'Language': s.language || 'Kotlin',
+      'Session ID': s.sessionId,
+      'Submitted At': formatDate(s.submittedAt),
+    }));
+
+    exportJsonToCsv('Hackathon_Arena_Submissions', exportData);
+    toast.success(`Exported ${exportData.length} submission records to CSV`);
   };
 
   return (
@@ -88,7 +110,7 @@ export default function Submissions() {
             </span>
           </div>
           <h1 className="text-2xl font-extrabold text-white tracking-tight mt-1 flex items-center gap-2.5">
-            <FileCode className="w-6 h-6 text-indigo-400" /> Contest Code Submissions Log
+            <FileCode className="w-6 h-6 text-indigo-400" /> Submission Tracker
           </h1>
           <p className="text-sm text-slate-400 mt-1">
             Immutable log of Kotlin compiler submissions, execution metrics, and sandbox assertion reports.
@@ -131,6 +153,18 @@ export default function Submissions() {
         </form>
 
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+          {/* Context Filter Dropdown */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400 font-medium">Context:</span>
+            <ContextSelector
+              selectedContextId={contextFilter}
+              onContextChange={(ctx) => setContextFilter(ctx)}
+              variant="dark"
+              size="sm"
+              className="w-48 sm:w-56"
+            />
+          </div>
+
           {/* Result Filter */}
           <div className="flex items-center gap-2">
             <span className="text-xs text-slate-400 font-medium">Result:</span>
@@ -163,16 +197,17 @@ export default function Submissions() {
             </select>
           </div>
 
-          {(search || resultFilter !== 'ALL' || difficultyFilter !== 'ALL') && (
+          {(search || resultFilter !== 'ALL' || difficultyFilter !== 'ALL' || contextFilter !== 'ALL') && (
             <button
               onClick={() => {
                 setSearch('');
                 setResultFilter('ALL');
                 setDifficultyFilter('ALL');
+                setContextFilter('ALL');
               }}
-              className="text-xs text-rose-400 hover:text-rose-300 underline cursor-pointer"
+              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold border border-slate-700 transition-all flex items-center gap-1.5"
             >
-              Reset Filters
+              <X className="w-3.5 h-3.5 text-rose-400" /> Reset Filters
             </button>
           )}
         </div>

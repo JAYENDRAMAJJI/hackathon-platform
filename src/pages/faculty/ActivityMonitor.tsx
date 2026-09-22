@@ -22,7 +22,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { apiClient } from '../../lib/api';
 import { ActivityLog } from '../../types/admin';
-import { exportToCSV } from '../../lib/exportUtils';
+import { exportToCSV, formatDate } from '../../lib/exportUtils';
 import { useToast } from '../../context/AdminToastContext';
 
 export default function ActivityMonitor() {
@@ -108,23 +108,24 @@ export default function ActivityMonitor() {
   };
 
   const handleExport = () => {
-    if (activities.length === 0) {
+    if (!activities || activities.length === 0) {
       showToast('warning', 'No activity records to export');
       return;
     }
 
     const data = activities.map((a) => ({
-      Timestamp: a.timestamp,
+      'Timestamp': formatDate(a.timestamp),
       'Student ID': a.studentId,
-      Student: a.studentName,
-      Activity: a.activity,
-      Question: a.questionTitle || 'General',
-      Difficulty: a.difficulty ? `Level ${a.difficulty}` : '-',
-      Result: a.result || 'EXECUTED',
+      'Student Name': a.studentName,
+      'Event Action': a.action || a.details,
+      'Event Details': a.details,
+      'IP Address': a.ipAddress,
+      'Device': a.device,
+      'Session ID': a.sessionId,
     }));
 
-    exportToCSV(data, `faculty_activity_stream_${new Date().toISOString().split('T')[0]}`);
-    showToast('success', 'Activity stream exported to CSV');
+    exportToCSV('Hackathon_Arena_Faculty_Activity_Stream', data);
+    showToast('success', `Exported ${data.length} activity records to CSV`);
   };
 
   // KPIs

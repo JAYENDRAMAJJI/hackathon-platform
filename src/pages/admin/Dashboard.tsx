@@ -181,7 +181,7 @@ export default function AdminDashboard() {
               to="/admin/live-sessions"
               className="text-blue-400 hover:text-blue-300 font-semibold flex items-center gap-1"
             >
-              Monitor 64 Active Participant Sessions <ChevronRight className="w-4 h-4" />
+              Open Live Monitor (64 Active Sessions) <ChevronRight className="w-4 h-4" />
             </Link>
           </div>
         </div>
@@ -257,9 +257,9 @@ export default function AdminDashboard() {
           linkText="Manage User Accounts"
         />
 
-        {/* Question Bank Card */}
+        {/* Question Manager Card */}
         <KpiCategoryCard
-          title="Questions Repository"
+          title="Question Manager"
           icon={Code2}
           color="emerald"
           mainValue={questions?.total || 20}
@@ -271,12 +271,12 @@ export default function AdminDashboard() {
             { label: 'Kotlin Sandboxed', value: '100%', color: 'text-blue-400' },
           ]}
           link="/admin/questions"
-          linkText="Explore Question Bank"
+          linkText="Open Question Manager"
         />
 
         {/* Submissions Card */}
         <KpiCategoryCard
-          title="Submissions Engine"
+          title="Submission Tracker"
           icon={FileCode}
           color="indigo"
           mainValue={submissions?.total || 45}
@@ -288,7 +288,7 @@ export default function AdminDashboard() {
             { label: 'Timeouts (>5s CPU)', value: submissions?.timeouts || 2, color: 'text-purple-400' },
           ]}
           link="/admin/submissions"
-          linkText="Inspect Submissions (Read-Only)"
+          linkText="Open Submission Tracker (Read-Only)"
         />
 
         {/* Sandbox Infrastructure Card */}
@@ -369,7 +369,7 @@ export default function AdminDashboard() {
               to="/admin/leaderboard"
               className="text-xs text-blue-400 hover:text-blue-300 font-semibold flex items-center gap-1"
             >
-              Full Leaderboard <ChevronRight className="w-3.5 h-3.5" />
+              Open Contest Rankings <ChevronRight className="w-3.5 h-3.5" />
             </Link>
           </div>
 

@@ -25,12 +25,15 @@ export default function AnalyticsDashboard() {
 
   const toast = useToast();
 
-  const fetchAnalytics = async () => {
+  const fetchAnalytics = async (isManual = false) => {
     setLoading(true);
     try {
       const resp = await apiClient.get('/admin/analytics');
       if (resp.success && resp.data) {
         setData(resp.data);
+        if (isManual) {
+          toast.success('Contest telemetry & analytics refreshed');
+        }
       }
     } catch (err: any) {
       toast.error('Failed to load analytics statistics');
@@ -44,14 +47,20 @@ export default function AnalyticsDashboard() {
   }, []);
 
   const handleExportCSV = () => {
-    if (!data?.difficultyDistribution) return;
-    exportJsonToCsv('difficulty_and_success_analytics', data.difficultyDistribution, {
-      level: 'Difficulty Level',
-      participants: 'Participant Count',
-      successRate: 'Success Rate (%)',
-      avgSolveMinutes: 'Avg Solve Time (min)',
-    });
-    toast.success('Analytics report downloaded');
+    if (!data?.difficultyDistribution || data.difficultyDistribution.length === 0) {
+      toast.warning('No analytics data available to export');
+      return;
+    }
+
+    const exportData = data.difficultyDistribution.map((d) => ({
+      'Difficulty Level': `Level ${d.level}`,
+      'Active Participants': d.participants,
+      'Success Rate (%)': `${d.successRate}%`,
+      'Avg Solve Time (min)': d.avgSolveMinutes,
+    }));
+
+    exportJsonToCsv('Hackathon_Arena_Difficulty_Analytics', exportData);
+    toast.success(`Exported difficulty analytics matrix to CSV`);
   };
 
   if (loading && !data) {
@@ -95,10 +104,12 @@ export default function AnalyticsDashboard() {
             <Download className="w-4 h-4 text-blue-400" /> Export Analytics CSV
           </button>
           <button
-            onClick={fetchAnalytics}
-            className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all shadow-sm"
+            onClick={() => fetchAnalytics(true)}
+            disabled={loading}
+            title="Refresh analytics telemetry"
+            className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all shadow-sm cursor-pointer disabled:opacity-50"
           >
-            <RefreshCw className="w-4 h-4 text-slate-400" />
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-blue-400' : 'text-slate-400 hover:text-white'}`} />
           </button>
         </div>
       </div>

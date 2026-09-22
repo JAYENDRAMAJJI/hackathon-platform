@@ -45,31 +45,31 @@ export const Logo: React.FC<LogoProps> = ({
   // Dimensions configuration based on size
   const sizeConfig = {
     sm: {
-      iconSize: 'w-8 h-8 rounded-xl',
+      iconSize: 'w-7.5 h-7.5 rounded-lg',
       svgSize: 'w-4 h-4',
       strokeWidth: '2.5',
-      titleSize: 'text-sm font-black tracking-tight',
-      badgeSize: 'text-[9px] px-1.5 py-0.5',
+      titleSize: 'text-xs font-black tracking-tight',
+      badgeSize: 'text-[8.5px] px-1.5 py-0.5 font-bold',
       subtitleSize: 'text-[9px]',
-      gap: 'gap-2.5',
+      gap: 'gap-2',
     },
     md: {
-      iconSize: 'w-10 h-10 rounded-2xl',
-      svgSize: 'w-5 h-5',
+      iconSize: 'w-9 h-9 rounded-xl',
+      svgSize: 'w-4.5 h-4.5',
       strokeWidth: '2.5',
-      titleSize: 'text-base sm:text-lg font-black tracking-tight',
-      badgeSize: 'text-[10px] px-2 py-0.5',
-      subtitleSize: 'text-[10.5px]',
-      gap: 'gap-3',
+      titleSize: 'text-sm font-black tracking-tight',
+      badgeSize: 'text-[9px] px-1.5 py-0.5 font-bold',
+      subtitleSize: 'text-[10px]',
+      gap: 'gap-2.5',
     },
     lg: {
-      iconSize: 'w-12 h-12 rounded-2xl',
-      svgSize: 'w-6 h-6',
+      iconSize: 'w-11 h-11 rounded-2xl',
+      svgSize: 'w-5.5 h-5.5',
       strokeWidth: '2.5',
-      titleSize: 'text-xl sm:text-2xl font-black tracking-tight',
-      badgeSize: 'text-[11px] px-2.5 py-0.5',
+      titleSize: 'text-xl font-black tracking-tight',
+      badgeSize: 'text-[10.5px] px-2 py-0.5 font-extrabold',
       subtitleSize: 'text-xs',
-      gap: 'gap-3.5',
+      gap: 'gap-3',
     },
   };
 
@@ -98,7 +98,7 @@ export const Logo: React.FC<LogoProps> = ({
       tabIndex={interactive ? 0 : undefined}
       title={interactive ? 'Refresh current page' : undefined}
       aria-label="Hackathon Arena 2.0 - Refresh current page"
-      className={`inline-flex items-center ${currentSize.gap} select-none ${
+      className={`inline-flex items-center ${currentSize.gap} select-none min-w-0 max-w-full ${
         interactive
           ? 'cursor-pointer group transition-all duration-200 hover:opacity-95 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2'
           : ''
@@ -128,16 +128,16 @@ export const Logo: React.FC<LogoProps> = ({
 
       {/* Typography & Badges Column (strictly 2-line layout matching official reference) */}
       {!collapsed && (
-        <div className="flex flex-col text-left leading-none shrink-0 min-w-0">
+        <div className="flex flex-col text-left leading-none min-w-0 flex-1 overflow-hidden">
           {/* Top Line: HACKATHON + ARENA 2.0 Pill Badge (strictly side-by-side, no wrapping) */}
-          <div className="flex items-center gap-2 whitespace-nowrap">
-            <span className={`${currentSize.titleSize} uppercase ${titleColor}`}>
+          <div className="flex items-center gap-1.5 whitespace-nowrap">
+            <span className={`${currentSize.titleSize} uppercase ${titleColor} tracking-tight`}>
               HACKATHON
             </span>
 
             {/* Official ARENA 2.0 Pill Badge */}
             <span
-              className={`inline-flex items-center font-extrabold uppercase tracking-wider rounded-full bg-[#181a38] text-indigo-300 border border-indigo-500/50 shadow-xs whitespace-nowrap ${currentSize.badgeSize}`}
+              className={`inline-flex items-center uppercase tracking-wider rounded-full bg-[#181a38] text-indigo-300 border border-indigo-500/40 shadow-xs whitespace-nowrap shrink-0 ${currentSize.badgeSize}`}
             >
               ARENA 2.0
             </span>
@@ -146,7 +146,8 @@ export const Logo: React.FC<LogoProps> = ({
           {/* Bottom Line: Subtitle */}
           {showSubtitle && (
             <span
-              className={`${currentSize.subtitleSize} font-medium ${subtitleColor} tracking-normal mt-1 whitespace-nowrap truncate`}
+              className={`${currentSize.subtitleSize} font-medium ${subtitleColor} tracking-tight mt-1 whitespace-nowrap truncate block max-w-full`}
+              title="University Coding Competition Platform"
             >
               University Coding Competition Platform
             </span>
@@ -158,3 +159,4 @@ export const Logo: React.FC<LogoProps> = ({
 };
 
 export default Logo;
+

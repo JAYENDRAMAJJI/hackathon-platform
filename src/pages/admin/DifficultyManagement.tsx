@@ -80,7 +80,7 @@ export default function DifficultyManagement() {
             to="/admin/questions"
             className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 transition-all shadow-sm"
           >
-            <Code2 className="w-4 h-4 text-emerald-400" /> Question Bank
+            <Code2 className="w-4 h-4 text-emerald-400" /> Question Manager
           </Link>
           <button
             onClick={fetchStats}

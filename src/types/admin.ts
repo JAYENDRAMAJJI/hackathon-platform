@@ -76,6 +76,7 @@ export interface Contest {
     name: string;
     email: string;
     department?: string;
+    employeeId?: string;
   }[];
   questionIds?: string[];
   assignedQuestionsCount?: number;
@@ -190,6 +191,27 @@ export interface LeaderboardEntry {
   averageTimeMinutes: number;
   lastSubmission: string;
   isOnline: boolean;
+  department?: string;
+  isCurrentStudent?: boolean;
+  isAssignedToFaculty?: boolean;
+}
+
+export interface LeaderboardContextItem {
+  id: string;
+  name: string;
+  status: string;
+  code?: string;
+  questionCount?: number;
+  participantsCount?: number;
+  startTime?: string;
+  endTime?: string;
+  isPublished?: boolean;
+  leaderboardVisible?: boolean;
+}
+
+export interface LeaderboardFilterMeta {
+  contexts: LeaderboardContextItem[];
+  contests?: LeaderboardContextItem[];
 }
 
 export type AnomalyType = 

@@ -341,7 +341,7 @@ export default function ContestQuestionsManager() {
             }}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-all shadow-sm"
           >
-            <ListPlus className="w-4 h-4 text-blue-400" /> Add from Question Bank
+            <ListPlus className="w-4 h-4 text-blue-400" /> Add from Question Manager
           </button>
 
           <button
@@ -524,7 +524,7 @@ export default function ContestQuestionsManager() {
             <h3 className="text-lg font-bold text-white">No Questions in this Contest Yet</h3>
             <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
               {contestQuestions.length === 0
-                ? 'Attach existing Kotlin problems from your Question Bank repository or author brand new custom questions for this contest.'
+                ? 'Attach existing Kotlin problems from your Question Manager repository or author brand new custom questions for this contest.'
                 : 'No questions matched your active search or difficulty filters.'}
             </p>
           </div>
@@ -533,7 +533,7 @@ export default function ContestQuestionsManager() {
               onClick={() => setIsAddBankModalOpen(true)}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold border border-slate-700"
             >
-              <ListPlus className="w-4 h-4 text-blue-400" /> Pick From Question Bank
+              <ListPlus className="w-4 h-4 text-blue-400" /> Pick From Question Manager
             </button>
             <button
               onClick={handleOpenCreateModal}
@@ -621,7 +621,7 @@ export default function ContestQuestionsManager() {
         </div>
       )}
 
-      {/* MODAL 1: Add Questions from Question Bank */}
+      {/* MODAL 1: Add Questions from Question Manager */}
       {isAddBankModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
@@ -629,7 +629,7 @@ export default function ContestQuestionsManager() {
             <div className="p-6 border-b border-slate-800 flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                  <ListPlus className="w-5 h-5 text-blue-400" /> Select Questions from Question Bank
+                  <ListPlus className="w-5 h-5 text-blue-400" /> Select Questions from Question Manager
                 </h2>
                 <p className="text-xs text-slate-400 mt-0.5">
                   Pick algorithmic challenges to attach to {contest?.name}.
@@ -1200,7 +1200,7 @@ export default function ContestQuestionsManager() {
         onClose={() => setConfirmModal({ isOpen: false, type: 'REMOVE' })}
         onConfirm={handleRemoveQuestion}
         title={`Remove "${confirmModal.question?.title}" from Contest?`}
-        description="This will detach this problem from the competition pool. The problem will remain intact in the general Question Bank."
+        description="This will detach this problem from the competition pool. The problem will remain intact in the general Question Manager."
         confirmText="Remove Question"
         variant="danger"
       />

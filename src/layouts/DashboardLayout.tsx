@@ -25,10 +25,10 @@ export const DashboardLayout = () => {
   ];
 
   return (
-    <div className="flex h-screen bg-slate-50 font-sans">
+    <div className="flex h-screen bg-slate-50 font-sans print:h-auto print:overflow-visible print:bg-white">
       {/* Sidebar */}
-      <aside className="w-64 bg-slate-900 text-white flex flex-col shadow-xl z-20">
-        <div className="p-4 border-b border-slate-800">
+      <aside className="w-64 bg-slate-900 text-white flex flex-col shadow-xl z-20 shrink-0 print:hidden">
+        <div className="h-16 flex items-center px-4 border-b border-slate-800">
           <Logo
             size="md"
             variant="dark"
@@ -78,9 +78,9 @@ export const DashboardLayout = () => {
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col overflow-hidden bg-slate-50">
+      <main className="flex-1 flex flex-col overflow-hidden bg-slate-50 print:overflow-visible print:h-auto print:bg-white">
         {/* Top Header */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0">
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0 print:hidden">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Institutional Hackathon</span>
             <span className="text-slate-300">•</span>
@@ -102,7 +102,7 @@ export const DashboardLayout = () => {
 
         {/* Notifications Dropdown Modal */}
         {showNotifsModal && (
-          <div className="absolute top-16 right-8 z-50 w-80 bg-white rounded-2xl border border-slate-200 shadow-2xl p-4 space-y-3 animate-in fade-in slide-in-from-top-2">
+          <div className="absolute top-16 right-8 z-50 w-80 bg-white rounded-2xl border border-slate-200 shadow-2xl p-4 space-y-3 animate-in fade-in slide-in-from-top-2 print:hidden">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2">
               <span className="text-xs font-bold text-slate-900">Notifications</span>
               <button
@@ -134,7 +134,7 @@ export const DashboardLayout = () => {
         )}
 
         {/* Page Content */}
-        <div className="flex-1 overflow-auto p-8">
+        <div className="flex-1 overflow-auto p-8 print:p-0 print:overflow-visible">
           <Outlet />
         </div>
       </main>

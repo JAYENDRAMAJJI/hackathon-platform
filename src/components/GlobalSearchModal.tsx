@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   Shield,
   Trophy,
+  CheckSquare,
   ArrowRight,
   X,
   Loader2,
@@ -161,9 +162,11 @@ const TYPE_CONFIG: Record<
 };
 
 const QUICK_ACTIONS = [
-  { label: 'Live Session Monitor', path: '/admin/live-monitoring', icon: Activity, desc: 'Real-time telemetry & active participant sessions', color: 'text-amber-400' },
-  { label: 'Contest Leaderboard', path: '/admin/leaderboard', icon: Trophy, desc: 'Live rankings, dynamic points & solve counts', color: 'text-yellow-400' },
-  { label: 'Manage Questions', path: '/admin/questions', icon: FileCode, desc: 'Question bank, difficulty levels & testcases', color: 'text-emerald-400' },
+  { label: 'Live Monitor', path: '/admin/live-sessions', icon: Activity, desc: 'Real-time telemetry & active participant sessions', color: 'text-amber-400' },
+  { label: 'Contest Rankings', path: '/admin/leaderboard', icon: Trophy, desc: 'Live rankings, dynamic points & solve counts', color: 'text-yellow-400' },
+  { label: 'Question Manager', path: '/admin/questions', icon: FileCode, desc: 'Question repository, difficulty levels & starter templates', color: 'text-emerald-400' },
+  { label: 'Test Validator', path: '/admin/test-cases', icon: CheckSquare, desc: 'Visible sample cases and hidden sandbox evaluation suites', color: 'text-purple-400' },
+  { label: 'Submission Tracker', path: '/admin/submissions', icon: FileCode, desc: 'Real-time code submissions log and execution verdicts', color: 'text-indigo-400' },
   { label: 'Security & Anomalies', path: '/admin/anomalies', icon: AlertTriangle, desc: 'Instant solve alerts & suspicious tab activity', color: 'text-rose-400' },
   { label: 'Reports Hub', path: '/admin/reports', icon: BarChart2, desc: 'Export student performance & submission metrics', color: 'text-indigo-400' },
   { label: 'Platform Settings', path: '/admin/settings', icon: Settings, desc: 'Scoring weights, sandbox rules & OAuth security', color: 'text-blue-400' },

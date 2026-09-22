@@ -87,18 +87,26 @@ export default function AuditLogs() {
   }, [search, actionFilter]);
 
   const handleExportCSV = () => {
-    exportJsonToCsv('security_audit_logs_immutable', logs, {
-      id: 'Audit Entry ID',
-      timestamp: 'Timestamp',
-      userName: 'Administrator',
-      role: 'Role',
-      action: 'Action Taken',
-      details: 'Audit Details',
-      ipAddress: 'IP Address',
-      sessionId: 'Session ID',
-      result: 'Result',
-    });
-    toast.success('Security audit log exported to CSV');
+    if (!logs || logs.length === 0) {
+      toast.warning('No security audit records available to export');
+      return;
+    }
+
+    const exportData = logs.map((l) => ({
+      'Audit Entry ID': l.id,
+      'Timestamp': formatDate(l.timestamp),
+      'User ID': l.userId || 'N/A',
+      'Operator / Administrator': l.userName,
+      'Role': l.role,
+      'Action Taken': l.action,
+      'Audit Details': l.details,
+      'IP Address': l.ipAddress,
+      'Session ID': l.sessionId || 'N/A',
+      'Result': l.result || 'SUCCESS',
+    }));
+
+    exportJsonToCsv('Hackathon_Arena_Audit_Logs', exportData);
+    toast.success(`Exported ${exportData.length} security audit records to CSV`);
   };
 
   return (

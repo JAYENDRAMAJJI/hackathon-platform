@@ -116,20 +116,24 @@ export default function QuestionAnalytics() {
   }, [questions, search, difficultyFilter, categoryFilter, sortField, sortOrder]);
 
   const handleExportCSV = () => {
-    if (!filteredAndSorted || filteredAndSorted.length === 0) return;
+    if (!filteredAndSorted || filteredAndSorted.length === 0) {
+      showToast('warning', 'No question analytics records available to export');
+      return;
+    }
     const formatted = filteredAndSorted.map((q) => ({
+      'Question ID': q.id || 'N/A',
       'Question Title': q.title,
-      Category: q.category || 'General',
-      Difficulty: `Level ${q.difficulty}`,
-      Attempts: q.attempts,
-      Solved: q.solved,
-      Failed: q.failed,
-      Skipped: q.skipped,
-      'Success Rate (%)': `${q.successRate}%`,
-      'Avg Time': q.averageSolvingTime,
+      'Category': q.category || 'General',
+      'Difficulty Level': `Level ${q.difficulty}`,
+      'Total Attempts': q.attempts ?? 0,
+      'Problems Solved': q.solved ?? 0,
+      'Problems Failed': q.failed ?? 0,
+      'Problems Skipped': q.skipped ?? 0,
+      'Success Rate (%)': `${q.successRate ?? 0}%`,
+      'Avg Solving Time': q.averageSolvingTime || 'N/A',
     }));
-    exportToCSV(formatted, `Faculty_Question_Analytics_${new Date().toISOString().slice(0, 10)}.csv`);
-    showToast('success', 'Question analytics exported to CSV');
+    exportToCSV('Hackathon_Arena_Question_Analytics', formatted);
+    showToast('success', `Exported ${formatted.length} question analytics records to CSV`);
   };
 
   const totalAttempts = questions.reduce((acc, q) => acc + (q.attempts || 0), 0);

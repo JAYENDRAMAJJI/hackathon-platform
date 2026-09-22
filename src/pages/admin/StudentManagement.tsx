@@ -142,21 +142,32 @@ export default function StudentManagement() {
   };
 
   const handleExportCSV = () => {
-    exportJsonToCsv('students_performance_report', students, {
-      id: 'Student ID',
-      name: 'Full Name',
-      email: 'Email',
-      score: 'Contest Score',
-      rank: 'Rank',
-      currentDifficulty: 'Current Level',
-      highestDifficulty: 'Highest Level',
-      solvedCount: 'Problems Solved',
-      skippedCount: 'Problems Skipped',
-      attemptsCount: 'Total Attempts',
-      sessionStatus: 'Session Status',
-      assignedFacultyName: 'Assigned Faculty',
-    });
-    toast.success('Student performance report exported');
+    if (!students || students.length === 0) {
+      toast.warning('No student records available to export');
+      return;
+    }
+
+    const exportData = students.map((s) => ({
+      'Student ID': s.id,
+      'Full Name': s.name,
+      'Email Address': s.email,
+      'Department': s.department || 'Computer Science & Engineering',
+      'Contest Score': s.score ?? 0,
+      'Rank': s.rank ?? 'Unranked',
+      'Current Level': s.currentDifficulty ? `Level ${s.currentDifficulty}` : 'Level 1',
+      'Highest Level Reached': s.highestDifficulty ? `Level ${s.highestDifficulty}` : 'Level 1',
+      'Problems Solved': s.solvedCount ?? 0,
+      'Problems Skipped': s.skippedCount ?? 0,
+      'Total Attempts': s.attemptsCount ?? 0,
+      'Account Status': s.status === 'ACTIVE' ? 'Active' : s.status === 'PENDING' ? 'Pending Approval' : s.status === 'SUSPENDED' ? 'Suspended' : s.status || 'Active',
+      'Session Status': s.sessionStatus || 'OFFLINE',
+      'Assigned Faculty': s.assignedFacultyName || 'Unassigned',
+      'Registration Date': formatDate(s.registrationDate),
+      'Last Login': formatDate(s.lastLogin),
+    }));
+
+    exportJsonToCsv('Hackathon_Arena_Students', exportData);
+    toast.success(`Exported ${exportData.length} student performance records to CSV`);
   };
 
   return (

@@ -258,7 +258,7 @@ export default function Login() {
           <div className="space-y-6 max-w-lg relative z-10 my-auto py-12">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-950/80 border border-indigo-800/80 text-indigo-300 text-xs font-semibold">
               <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-              <span>{BRAND_CONFIG.phase}</span>
+              <span>Competitive Algorithmic Arena</span>
             </div>
 
             <h1 className="text-4xl font-black tracking-tight leading-tight text-white">
@@ -384,28 +384,98 @@ export default function Login() {
 
             {/* Error Banners */}
             {roleMismatchError && (
-              <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 text-xs text-rose-800 dark:text-rose-200 space-y-3 animate-in fade-in">
-                <div className="flex items-start gap-2.5">
-                  <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <p className="font-bold text-rose-900 dark:text-rose-100">Role Not Authorized</p>
-                    <p className="leading-relaxed">{roleMismatchError}</p>
+              <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 text-xs text-rose-800 dark:text-rose-200 space-y-3 animate-in fade-in relative">
+                <div className="flex items-start justify-between gap-2.5">
+                  <div className="flex items-start gap-2.5">
+                    <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <p className="font-bold text-rose-900 dark:text-rose-100">Role Not Authorized</p>
+                      <p className="leading-relaxed">{roleMismatchError}</p>
+                    </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setRoleMismatchError(null)}
+                    className="text-rose-400 hover:text-rose-600 p-1 shrink-0"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Quick Role Switch Helper Buttons */}
+                <div className="pt-1 flex flex-wrap gap-2">
+                  {roleMismatchError.includes('STUDENT') && selectedRole !== 'STUDENT' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedRole('STUDENT');
+                        setRoleMismatchError(null);
+                        setFormError(null);
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] flex items-center gap-1.5 transition-all"
+                    >
+                      <Code className="w-3 h-3" /> Switch to Student & Retry
+                    </button>
+                  )}
+                  {roleMismatchError.includes('FACULTY') && selectedRole !== 'FACULTY' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedRole('FACULTY');
+                        setRoleMismatchError(null);
+                        setFormError(null);
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] flex items-center gap-1.5 transition-all"
+                    >
+                      <GraduationCap className="w-3 h-3" /> Switch to Faculty & Retry
+                    </button>
+                  )}
+                  {roleMismatchError.includes('ADMIN') && selectedRole !== 'ADMIN' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedRole('ADMIN');
+                        setRoleMismatchError(null);
+                        setFormError(null);
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-bold text-[11px] flex items-center gap-1.5 transition-all"
+                    >
+                      <Shield className="w-3 h-3" /> Switch to Admin & Retry
+                    </button>
+                  )}
                 </div>
               </div>
             )}
 
             {formError && !roleMismatchError && (
-              <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 text-xs text-rose-700 dark:text-rose-300 flex items-start gap-2.5">
-                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>{formError}</span>
+              <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 text-xs text-rose-700 dark:text-rose-300 flex items-start justify-between gap-2.5 animate-in fade-in">
+                <div className="flex items-start gap-2.5">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
+                  <span className="font-medium">{formError}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFormError(null)}
+                  className="text-rose-400 hover:text-rose-600 p-0.5 shrink-0"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
               </div>
             )}
 
             {roleError && (
-              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-900 text-xs text-amber-800 dark:text-amber-300 flex items-center gap-2">
-                <Info className="w-4 h-4 shrink-0 text-amber-600" />
-                <span>{roleError}</span>
+              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-900 text-xs text-amber-800 dark:text-amber-300 flex items-center justify-between gap-2 animate-in fade-in">
+                <div className="flex items-center gap-2">
+                  <Info className="w-4 h-4 shrink-0 text-amber-600" />
+                  <span className="font-medium">{roleError}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setRoleError(null)}
+                  className="text-amber-500 hover:text-amber-700 p-0.5 shrink-0"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
               </div>
             )}
 
@@ -532,10 +602,16 @@ export default function Login() {
                 type="button"
                 onClick={handleGoogleLogin}
                 disabled={isGoogleLoading}
-                className="w-full py-3 px-4 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-750 text-slate-800 dark:text-slate-100 font-bold text-xs shadow-xs flex items-center justify-center gap-3 transition-all cursor-pointer"
+                className="w-full py-3 px-4 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-750 text-slate-800 dark:text-slate-100 font-bold text-xs shadow-xs flex items-center justify-center gap-3 transition-all cursor-pointer disabled:opacity-70"
               >
                 {isGoogleLoading ? (
-                  <span>Authenticating with Google...</span>
+                  <span className="flex items-center gap-2">
+                    <svg className="animate-spin h-4 w-4 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Authenticating with Google...</span>
+                  </span>
                 ) : (
                   <>
                     <svg className="w-4 h-4" viewBox="0 0 24 24">
@@ -746,10 +822,16 @@ export default function Login() {
               <Button
                 type="submit"
                 disabled={isLoading}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-3 rounded-xl shadow-md shadow-indigo-600/20 flex items-center justify-center gap-2 transition-all mt-3"
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-3 rounded-xl shadow-md shadow-indigo-600/20 flex items-center justify-center gap-2 transition-all mt-3 cursor-pointer"
               >
                 {isLoading ? (
-                  <span>Authenticating...</span>
+                  <span className="flex items-center gap-2">
+                    <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Authenticating...</span>
+                  </span>
                 ) : (
                   <>
                     <span>Sign In {selectedRole ? `as ${selectedRole}` : ''}</span>
@@ -758,26 +840,6 @@ export default function Login() {
                 )}
               </Button>
             </form>
-
-            {/* Registration Callout Box */}
-            <div className="p-3.5 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-800/60 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-              <div className="text-center sm:text-left">
-                <p className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5 justify-center sm:justify-start">
-                  <Sparkles className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                  <span>New user? Register here</span>
-                </p>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Create a Student, Faculty, or Admin account
-                </p>
-              </div>
-              <Link
-                to={`/register?role=${selectedRole || 'STUDENT'}`}
-                className="shrink-0 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs shadow-indigo-600/20 transition-all"
-              >
-                <span>Register</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
           </div>
 
           {/* Bottom Support Contact */}

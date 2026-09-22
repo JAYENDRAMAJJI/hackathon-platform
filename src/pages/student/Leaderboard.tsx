@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Trophy, Search, RefreshCw, Crown, Award, Star, Activity, User, Building, ArrowRight } from 'lucide-react';
+import { Trophy, Search, RefreshCw, Crown, Award, Star, Activity, User, Building, ArrowRight, Sparkles } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { apiClient } from '../../lib/api';
 import { useAuthStore } from '../../store/authStore';
 import { useNavigate } from 'react-router-dom';
+import LeaderboardFilter from '../../components/LeaderboardFilter';
+import { LeaderboardFilterMeta } from '../../types/admin';
 
 export interface StudentLeaderboardEntry {
   rank: number;
@@ -28,15 +30,22 @@ export default function StudentLeaderboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
+  const [filterKey, setFilterKey] = useState('ALL');
+  const [filterMeta, setFilterMeta] = useState<LeaderboardFilterMeta | null>(null);
   const { user } = useAuthStore();
   const navigate = useNavigate();
 
-  const fetchLeaderboard = async () => {
+  const fetchLeaderboard = async (currentKey = filterKey) => {
     try {
       setRefreshing(true);
-      const resp = await apiClient.get('/student/leaderboard');
+      const resp = await apiClient.get('/student/leaderboard', { filterKey: currentKey, contextId: currentKey });
       if (resp.success && resp.data) {
         setStandings(resp.data);
+      }
+      if (resp.filterMeta) {
+        setFilterMeta(resp.filterMeta);
+      } else if (resp.contexts) {
+        setFilterMeta({ contexts: resp.contexts });
       }
     } catch (err) {
       console.error('Failed to load student leaderboard:', err);
@@ -47,8 +56,13 @@ export default function StudentLeaderboard() {
   };
 
   useEffect(() => {
-    fetchLeaderboard();
-  }, []);
+    fetchLeaderboard(filterKey);
+  }, [filterKey]);
+
+  const handleFilterChange = (newKey: string) => {
+    setFilterKey(newKey);
+    setLoading(true);
+  };
 
   const filteredStandings = useMemo(() => {
     let list = standings;
@@ -70,6 +84,9 @@ export default function StudentLeaderboard() {
     [standings, user]
   );
 
+  const selectedContext = filterMeta?.contexts?.find((c) => c.id === filterKey || `contest:${c.id}` === filterKey);
+  const currentContextName = filterKey === 'ALL' || !selectedContext ? 'All Contexts' : selectedContext.name;
+
   return (
     <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-300 pb-16 font-sans">
       {/* Top Header & Overview */}
@@ -83,14 +100,14 @@ export default function StudentLeaderboard() {
             <Trophy className="w-8 h-8 text-yellow-500" /> Contest Leaderboard
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Real-time algorithmic competition standings across all registered university participants.
+            Real-time algorithmic competition standings for <span className="font-semibold text-blue-600">{currentContextName}</span>.
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           <Button
             variant="secondary"
-            onClick={fetchLeaderboard}
+            onClick={() => fetchLeaderboard(filterKey)}
             disabled={refreshing}
             className="flex items-center gap-2 text-xs font-bold bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 shadow-sm"
           >
@@ -219,17 +236,17 @@ export default function StudentLeaderboard() {
         </div>
       )}
 
-      {/* Search Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3">
-        <Search className="w-5 h-5 text-slate-400" />
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search participants by name or department..."
-          className="w-full bg-transparent border-none text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
-        />
-      </div>
+      {/* Search & Content-Wise Filter Toolbar */}
+      <LeaderboardFilter
+        searchValue={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search participants by name or department..."
+        selectedKey={filterKey}
+        onFilterChange={handleFilterChange}
+        meta={filterMeta}
+        totalParticipants={filteredStandings.length}
+        variant="light"
+      />
 
       {/* Standings Table */}
       <Card className="shadow-sm border-slate-200 overflow-hidden">

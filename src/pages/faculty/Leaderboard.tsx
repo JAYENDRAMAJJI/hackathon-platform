@@ -16,6 +16,8 @@ import { Input } from '../../components/ui/Input';
 import { apiClient } from '../../lib/api';
 import { exportToCSV } from '../../lib/exportUtils';
 import { useToast } from '../../context/AdminToastContext';
+import LeaderboardFilter from '../../components/LeaderboardFilter';
+import { LeaderboardFilterMeta } from '../../types/admin';
 
 export interface LeaderboardEntry {
   id: string;
@@ -39,16 +41,23 @@ export default function FacultyLeaderboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
   const [filterAssignedOnly, setFilterAssignedOnly] = useState(false);
+  const [filterKey, setFilterKey] = useState('ALL');
+  const [filterMeta, setFilterMeta] = useState<LeaderboardFilterMeta | null>(null);
 
   const navigate = useNavigate();
   const toast = useToast();
 
-  const fetchLeaderboard = async (isManual = false) => {
+  const fetchLeaderboard = async (isManual = false, currentKey = filterKey) => {
     try {
       setRefreshing(true);
-      const resp = await apiClient.get('/faculty/leaderboard');
+      const resp = await apiClient.get('/faculty/leaderboard', { filterKey: currentKey, contextId: currentKey });
       if (resp.success && resp.data) {
         setStandings(resp.data);
+      }
+      if (resp.filterMeta) {
+        setFilterMeta(resp.filterMeta);
+      } else if (resp.contexts) {
+        setFilterMeta({ contexts: resp.contexts });
       }
       if (isManual) {
         toast.success('Leaderboard refreshed');
@@ -63,8 +72,12 @@ export default function FacultyLeaderboard() {
   };
 
   useEffect(() => {
-    fetchLeaderboard(false);
-  }, []);
+    fetchLeaderboard(false, filterKey);
+  }, [filterKey]);
+
+  const handleFilterChange = (newKey: string) => {
+    setFilterKey(newKey);
+  };
 
   const filteredStandings = useMemo(() => {
     let list = standings;
@@ -85,37 +98,66 @@ export default function FacultyLeaderboard() {
 
   const top3 = useMemo(() => standings.slice(0, 3), [standings]);
 
+  const selectedContext = filterMeta?.contexts?.find((c) => c.id === filterKey || `contest:${c.id}` === filterKey);
+  const currentContextName = filterKey === 'ALL' || !selectedContext ? 'All Contexts' : selectedContext.name;
+
   const handleExport = () => {
-    if (filteredStandings.length === 0) {
+    if (!filteredStandings || filteredStandings.length === 0) {
       toast.warning('No leaderboard data to export');
       return;
     }
 
     const data = filteredStandings.map((s) => ({
-      Rank: s.rank,
-      Name: s.name,
-      Email: s.email,
-      Department: s.department || 'N/A',
-      Score: s.score,
-      Solved: s.solved,
-      Attempts: s.attempts,
-      Skipped: s.skipped,
-      'Current Level': s.currentDifficulty,
-      'Highest Level': s.highestDifficulty,
-      'Avg Time': s.averageSolvingTime,
-      'Assigned to You': s.isAssignedToFaculty ? 'YES' : 'NO',
+      'Rank': s.rank,
+      'Student ID': s.id || 'N/A',
+      'Student Name': s.name,
+      'Email Address': s.email,
+      'Department': s.department || 'Computer Science & Engineering',
+      'Total Score': s.score ?? 0,
+      'Problems Solved': s.solved ?? 0,
+      'Total Attempts': s.attempts ?? 0,
+      'Problems Skipped': s.skipped ?? 0,
+      'Current Level': `Level ${s.currentDifficulty || 1}`,
+      'Highest Level Reached': `Level ${s.highestDifficulty || s.currentDifficulty || 1}`,
+      'Avg Solve Time': s.averageSolvingTime || 'N/A',
+      'Supervised By You': s.isAssignedToFaculty ? 'YES' : 'NO',
+      'Context': currentContextName,
     }));
 
-    exportToCSV(data, `leaderboard_supervisory_standings_${new Date().toISOString().split('T')[0]}`);
-    toast.success('Leaderboard standings exported to CSV');
+    const filename = `Hackathon_Faculty_Leaderboard_${currentContextName.replace(/[^a-zA-Z0-9]/g, '_')}`;
+    exportToCSV(filename, data);
+    toast.success(`Exported ${data.length} leaderboard standings to CSV`);
   };
 
   const handlePrint = () => {
+    if (loading && standings.length === 0) {
+      toast.warning('Leaderboard standings are currently loading. Please wait.');
+      return;
+    }
+    if (!filteredStandings || filteredStandings.length === 0) {
+      toast.warning('No leaderboard data to print');
+      return;
+    }
     window.print();
   };
 
   return (
-    <div className="space-y-6 print:p-0">
+    <div className="space-y-6 print:p-0 print:bg-white print:text-slate-900">
+      {/* Printable Official Institutional Header (Only in print) */}
+      <div className="hidden print:block mb-6 border-b-2 border-slate-900 pb-4">
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-xl font-black text-slate-900 tracking-tight">HACKATHON ARENA 2.0</h1>
+            <p className="text-xs text-slate-600 font-semibold uppercase tracking-wider">
+              Faculty Supervisory Leaderboard & Standings ({currentContextName})
+            </p>
+          </div>
+          <div className="text-right text-xs text-slate-600 font-mono">
+            <p>Printed: {new Date().toLocaleString()}</p>
+            <p>Supervisory Cohort Evaluation</p>
+          </div>
+        </div>
+      </div>
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:hidden">
         <div>
@@ -132,9 +174,9 @@ export default function FacultyLeaderboard() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => fetchLeaderboard(true)}
+            onClick={() => fetchLeaderboard(true, filterKey)}
             disabled={refreshing}
-            className="text-xs font-semibold flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700 rounded-xl"
+            className="text-xs font-semibold flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700 rounded-xl cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
             Refresh
@@ -143,7 +185,7 @@ export default function FacultyLeaderboard() {
             variant="outline"
             size="sm"
             onClick={handlePrint}
-            className="text-xs font-semibold flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700 rounded-xl"
+            className="text-xs font-semibold flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700 rounded-xl cursor-pointer"
           >
             <Printer className="w-3.5 h-3.5" />
             Print
@@ -151,7 +193,7 @@ export default function FacultyLeaderboard() {
           <Button
             size="sm"
             onClick={handleExport}
-            className="text-xs font-bold flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl shadow-lg shadow-indigo-600/20"
+            className="text-xs font-bold flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl shadow-lg shadow-indigo-600/20 cursor-pointer"
           >
             <Download className="w-3.5 h-3.5" />
             Export CSV
@@ -160,7 +202,7 @@ export default function FacultyLeaderboard() {
       </div>
 
       {/* Top 3 Podium Cards */}
-      {top3.length >= 3 && !filterAssignedOnly && (
+      {top3.length >= 3 && !filterAssignedOnly && !search && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 print:hidden">
           {/* #2 Silver */}
           <Card className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl relative overflow-hidden">
@@ -209,53 +251,49 @@ export default function FacultyLeaderboard() {
         </div>
       )}
 
-      {/* Filter & Cohort Toggle Bar */}
-      <Card className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl print:hidden">
-        <CardContent className="p-4 flex flex-col sm:flex-row gap-3 items-center justify-between">
-          <div className="relative flex-1 w-full">
-            <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
-            <Input
-              type="text"
-              placeholder="Search student by name, email, or department..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 text-xs bg-slate-800/80 border-slate-700 text-white placeholder-slate-500 focus:border-indigo-500"
+      {/* Search, Content Filter & Supervised Cohort Toolbar */}
+      <LeaderboardFilter
+        searchValue={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search student by name, email, or department..."
+        selectedKey={filterKey}
+        onFilterChange={handleFilterChange}
+        meta={filterMeta}
+        totalParticipants={filteredStandings.length}
+        variant="dark"
+        className="print:hidden"
+        rightSlot={
+          <label className="flex items-center gap-2 text-xs font-semibold text-slate-300 cursor-pointer select-none bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700/80 hover:bg-slate-800 transition-colors">
+            <input
+              type="checkbox"
+              checked={filterAssignedOnly}
+              onChange={(e) => setFilterAssignedOnly(e.target.checked)}
+              className="rounded border-slate-600 text-indigo-500 focus:ring-indigo-500/40 bg-slate-700"
             />
-          </div>
-
-          <div className="flex items-center gap-3">
-            <label className="flex items-center gap-2 text-xs font-semibold text-slate-200 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={filterAssignedOnly}
-                onChange={(e) => setFilterAssignedOnly(e.target.checked)}
-                className="rounded border-slate-700 text-indigo-600 focus:ring-indigo-500 bg-slate-800"
-              />
-              Show My Assigned Cohort Only
-            </label>
-          </div>
-        </CardContent>
-      </Card>
+            <span>Show My Supervised Cohort Only</span>
+          </label>
+        }
+      />
 
       {/* Leaderboard Table */}
-      <Card className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-left">
-              <thead className="bg-slate-800/90 text-xs font-bold uppercase tracking-wider text-slate-200 border-b border-slate-700">
+      <Card className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden print:border-none print:shadow-none print:bg-white print:overflow-visible">
+        <CardContent className="p-0 print:overflow-visible">
+          <div className="overflow-x-auto print:overflow-visible">
+            <table className="w-full text-xs text-left print:text-slate-900">
+              <thead className="bg-slate-800/90 text-xs font-bold uppercase tracking-wider text-slate-200 border-b border-slate-700 print:bg-slate-100 print:text-slate-900 print:border-slate-300">
                 <tr>
-                  <th className="px-4 py-3.5 text-center">Rank</th>
-                  <th className="px-4 py-3.5">Student</th>
-                  <th className="px-4 py-3.5">Department</th>
-                  <th className="px-4 py-3.5 text-center">Score</th>
-                  <th className="px-4 py-3.5 text-center">Solved / Attempts</th>
-                  <th className="px-4 py-3.5 text-center">Skipped</th>
-                  <th className="px-4 py-3.5 text-center">Difficulty</th>
-                  <th className="px-4 py-3.5">Avg Time</th>
+                  <th className="px-4 py-3.5 text-center print:p-2 print:border print:border-slate-300">Rank</th>
+                  <th className="px-4 py-3.5 print:p-2 print:border print:border-slate-300">Student</th>
+                  <th className="px-4 py-3.5 print:p-2 print:border print:border-slate-300">Department</th>
+                  <th className="px-4 py-3.5 text-center print:p-2 print:border print:border-slate-300">Score</th>
+                  <th className="px-4 py-3.5 text-center print:p-2 print:border print:border-slate-300">Solved / Attempts</th>
+                  <th className="px-4 py-3.5 text-center print:p-2 print:border print:border-slate-300">Skipped</th>
+                  <th className="px-4 py-3.5 text-center print:p-2 print:border print:border-slate-300">Difficulty</th>
+                  <th className="px-4 py-3.5 print:p-2 print:border print:border-slate-300">Avg Time</th>
                   <th className="px-4 py-3.5 text-right print:hidden">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60">
+              <tbody className="divide-y divide-slate-800/60 print:divide-slate-300">
                 {loading ? (
                   <tr>
                     <td colSpan={9} className="px-4 py-12 text-center text-slate-400">

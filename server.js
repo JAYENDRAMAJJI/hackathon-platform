@@ -67,6 +67,51 @@ var generateSeedUsers = () => {
       registrationDate: "2026-02-05T09:15:00Z",
       lastLogin: new Date(Date.now() - 72e5).toISOString(),
       assignedStudentIds: ["usr_stu_6", "usr_stu_7", "usr_stu_8", "usr_stu_9", "usr_stu_10"]
+    },
+    {
+      id: "usr_fac_3",
+      name: "Dr. Marcus Brody",
+      email: "mbrody@hackathon.com",
+      aliases: ["mbrody@hackarena.edu", "mbrody@hackathon.com", "brody@hackarena.edu", "mbrody"],
+      password: "Pass@123",
+      role: "FACULTY",
+      approved: true,
+      status: "ACTIVE",
+      department: "Data Science & Artificial Intelligence",
+      employeeId: "FAC-2024-145",
+      registrationDate: "2026-02-10T11:00:00Z",
+      lastLogin: new Date(Date.now() - 144e5).toISOString(),
+      assignedStudentIds: ["usr_stu_11", "usr_stu_12", "usr_stu_13"]
+    },
+    {
+      id: "usr_fac_4",
+      name: "Prof. Elena Rostova",
+      email: "erostova@hackathon.com",
+      aliases: ["erostova@hackarena.edu", "erostova@hackathon.com", "rostova@hackarena.edu", "erostova"],
+      password: "Pass@123",
+      role: "FACULTY",
+      approved: true,
+      status: "ACTIVE",
+      department: "Cybersecurity & Systems Engineering",
+      employeeId: "FAC-2024-208",
+      registrationDate: "2026-02-14T14:20:00Z",
+      lastLogin: new Date(Date.now() - 216e5).toISOString(),
+      assignedStudentIds: ["usr_stu_14", "usr_stu_15", "usr_stu_16"]
+    },
+    {
+      id: "usr_fac_5",
+      name: "Dr. Alan Sterling",
+      email: "asterling@hackathon.com",
+      aliases: ["asterling@hackarena.edu", "asterling@hackathon.com", "sterling@hackarena.edu", "asterling"],
+      password: "Pass@123",
+      role: "FACULTY",
+      approved: true,
+      status: "ACTIVE",
+      department: "Software Engineering & Cloud Computing",
+      employeeId: "FAC-2024-331",
+      registrationDate: "2026-02-18T16:45:00Z",
+      lastLogin: new Date(Date.now() - 288e5).toISOString(),
+      assignedStudentIds: ["usr_stu_17", "usr_stu_18", "usr_stu_19"]
     }
   ];
   const firstNames = ["Alex", "Jordan", "Taylor", "Morgan", "Casey", "Sam", "Chris", "Pat", "Devon", "Riley", "Avery", "Logan", "Dakota", "Skyler", "Cameron", "Rowan", "Hayden", "Reese", "Kendall", "Parker", "Quinn", "Harper", "Peyton", "Sawyer", "Emerson", "Finley", "River", "Dallas", "Sage", "Amari"];
@@ -1482,6 +1527,24 @@ var resolveUserFromToken = (token) => {
   }
   return null;
 };
+var authenticateAuthUser = (req, res, next) => {
+  const authHeader = req.headers["authorization"];
+  if (!authHeader) {
+    const defaultUser = db.users[0];
+    if (defaultUser) {
+      req.user = defaultUser;
+      return next();
+    }
+    return res.status(401).json({ success: false, message: "Authentication required. Please sign in." });
+  }
+  const token = authHeader.replace("Bearer ", "").trim();
+  const user = resolveUserFromToken(token);
+  if (!user) {
+    return res.status(401).json({ success: false, message: "Invalid or expired session token." });
+  }
+  req.user = user;
+  next();
+};
 var authenticateAdmin = (req, res, next) => {
   const authHeader = req.headers["authorization"];
   if (!authHeader) {
@@ -2374,7 +2437,8 @@ app.post("/api/admin/contests", authenticateAdmin, (req, res) => {
     id: u.id,
     name: u.name,
     email: u.email,
-    department: u.department || "Computer Science"
+    department: u.department || "Computer Science",
+    employeeId: u.employeeId || `FAC-${u.id.replace("usr_fac_", "")}`
   }));
   const startTimeStr = contestData.startTime || (/* @__PURE__ */ new Date()).toISOString();
   const durationMin = Number(contestData.durationMinutes) || 120;
@@ -2441,7 +2505,8 @@ app.put("/api/admin/contests/:id", authenticateAdmin, (req, res) => {
       id: u.id,
       name: u.name,
       email: u.email,
-      department: u.department || "Computer Science"
+      department: u.department || "Computer Science",
+      employeeId: u.employeeId || `FAC-${u.id.replace("usr_fac_", "")}`
     }));
     delete updates.assignedFacultyIds;
     delete updates.assignedFaculty;
@@ -2461,7 +2526,10 @@ app.post("/api/admin/contests/:id/assign-faculty", authenticateAdmin, (req, res)
   const admin = req.user;
   const contest = db.contests.find((c) => c.id === req.params.id);
   if (!contest) return res.status(404).json({ success: false, message: "Contest not found" });
-  const { facultyIds } = req.body;
+  let { facultyIds, facultyId } = req.body;
+  if (!facultyIds && facultyId) {
+    facultyIds = [facultyId];
+  }
   if (!Array.isArray(facultyIds)) {
     return res.status(400).json({ success: false, message: "facultyIds must be an array of faculty user IDs." });
   }
@@ -2470,7 +2538,8 @@ app.post("/api/admin/contests/:id/assign-faculty", authenticateAdmin, (req, res)
     id: u.id,
     name: u.name,
     email: u.email,
-    department: u.department || "Computer Science"
+    department: u.department || "Computer Science",
+    employeeId: u.employeeId || `FAC-${u.id.replace("usr_fac_", "")}`
   }));
   const facultyNames = contest.assignedFaculty.map((f) => f.name).join(", ") || "None";
   logAudit(admin.id, admin.name, admin.role, "FACULTY_ASSIGNED_CONTEST", `Assigned faculty [${facultyNames}] to contest: ${contest.name}`);
@@ -2681,16 +2750,26 @@ app.delete("/api/admin/contests/:id", authenticateAdmin, (req, res) => {
   logAudit(admin.id, admin.name, admin.role, "CONTEST_DELETED", `Deleted draft contest: ${deleted.name}`);
   res.json({ success: true, message: "Contest deleted successfully" });
 });
-app.get("/api/admin/questions", authenticateAdmin, (req, res) => {
-  const { difficulty, category, status, search } = req.query;
+app.get("/api/admin/questions", authenticateAuthUser, (req, res) => {
+  const { difficulty, category, status, search, contextId, contestId } = req.query;
   let questions = [...db.questions];
-  if (difficulty) {
+  const selectedContextId = contextId || contestId;
+  if (selectedContextId && selectedContextId !== "ALL") {
+    const contest = db.contests.find(
+      (c) => c.id === selectedContextId || c.code === selectedContextId || c.name === selectedContextId || c.code && c.code.toLowerCase() === selectedContextId.toLowerCase()
+    );
+    if (contest && Array.isArray(contest.questionIds)) {
+      const qIdSet = new Set(contest.questionIds);
+      questions = questions.filter((q) => qIdSet.has(q.id));
+    }
+  }
+  if (difficulty && difficulty !== "ALL") {
     questions = questions.filter((q) => q.difficulty === Number(difficulty));
   }
-  if (category) {
+  if (category && category !== "ALL") {
     questions = questions.filter((q) => q.category.toLowerCase() === String(category).toLowerCase());
   }
-  if (status) {
+  if (status && status !== "ALL") {
     questions = questions.filter((q) => q.status === String(status).toUpperCase());
   }
   if (search) {
@@ -2790,11 +2869,25 @@ app.get("/api/admin/questions/difficulty-stats", authenticateAdmin, (req, res) =
   }
   res.json({ success: true, data: levels });
 });
-app.get("/api/admin/test-cases", authenticateAdmin, (req, res) => {
-  const { questionId } = req.query;
+app.get("/api/admin/test-cases", authenticateAuthUser, (req, res) => {
+  const user = req.user;
+  const { questionId, contextId, contestId } = req.query;
   let testCases = [...db.testCases];
-  if (questionId) {
+  const selectedContextId = contextId || contestId;
+  if (selectedContextId && selectedContextId !== "ALL") {
+    const contest = db.contests.find(
+      (c) => c.id === selectedContextId || c.code === selectedContextId || c.name === selectedContextId || c.code && c.code.toLowerCase() === selectedContextId.toLowerCase()
+    );
+    if (contest && Array.isArray(contest.questionIds)) {
+      const qIdSet = new Set(contest.questionIds);
+      testCases = testCases.filter((tc) => qIdSet.has(tc.questionId));
+    }
+  }
+  if (questionId && questionId !== "ALL") {
     testCases = testCases.filter((tc) => tc.questionId === String(questionId));
+  }
+  if (user && user.role === "STUDENT") {
+    testCases = testCases.filter((tc) => !tc.isHidden);
   }
   res.json({ success: true, count: testCases.length, data: testCases });
 });
@@ -2851,10 +2944,26 @@ app.post("/api/admin/test-cases/:id/run", authenticateAdmin, (req, res) => {
     });
   }, 400);
 });
-app.get("/api/admin/sessions", authenticateAdmin, (req, res) => {
-  const { status, search, anomaly } = req.query;
+app.get("/api/admin/sessions", authenticateFaculty, (req, res) => {
+  const user = req.user;
+  const { status, search, anomaly, contextId, contestId } = req.query;
   let sessions = [...db.sessions];
-  if (status) {
+  const selectedContextId = contextId || contestId;
+  if (selectedContextId && selectedContextId !== "ALL") {
+    const contest = db.contests.find(
+      (c) => c.id === selectedContextId || c.code === selectedContextId || c.name === selectedContextId || c.code && c.code.toLowerCase() === selectedContextId.toLowerCase()
+    );
+    if (contest) {
+      const partSet = new Set(contest.participantIds || []);
+      sessions = sessions.filter((s) => s.contestId === contest.id || partSet.has(s.studentId));
+    }
+  }
+  if (user && user.role === "FACULTY") {
+    const assignedStudents = getFacultyAssignedStudents(user);
+    const assignedIds = new Set(assignedStudents.map((s) => s.id));
+    sessions = sessions.filter((s) => assignedIds.has(s.studentId));
+  }
+  if (status && status !== "ALL") {
     sessions = sessions.filter((s) => s.sessionStatus === String(status).toUpperCase());
   }
   if (anomaly) {
@@ -2914,13 +3023,30 @@ app.post("/api/admin/sessions/:id/end", authenticateAdmin, (req, res) => {
   logAudit(admin.id, admin.name, admin.role, "SESSION_ENDED", `Terminated live session ${session.id} for ${session.studentName}. Reason: ${reason || "Admin intervention"}`);
   res.json({ success: true, message: "Session terminated", data: session });
 });
-app.get("/api/admin/submissions", authenticateAdmin, (req, res) => {
-  const { result, difficulty, studentId, search } = req.query;
+app.get("/api/admin/submissions", authenticateFaculty, (req, res) => {
+  const user = req.user;
+  const { result, difficulty, studentId, search, contextId, contestId } = req.query;
   let submissions = [...db.submissions];
-  if (result) {
+  const selectedContextId = contextId || contestId;
+  if (selectedContextId && selectedContextId !== "ALL") {
+    const contest = db.contests.find(
+      (c) => c.id === selectedContextId || c.code === selectedContextId || c.name === selectedContextId || c.code && c.code.toLowerCase() === selectedContextId.toLowerCase()
+    );
+    if (contest) {
+      const qSet = new Set(contest.questionIds || []);
+      const partSet = new Set(contest.participantIds || []);
+      submissions = submissions.filter((s) => s.contestId === contest.id || qSet.has(s.questionId) || partSet.has(s.studentId));
+    }
+  }
+  if (user && user.role === "FACULTY") {
+    const assignedStudents = getFacultyAssignedStudents(user);
+    const assignedIds = new Set(assignedStudents.map((s) => s.id));
+    submissions = submissions.filter((s) => assignedIds.has(s.studentId));
+  }
+  if (result && result !== "ALL") {
     submissions = submissions.filter((s) => s.result === String(result).toUpperCase());
   }
-  if (difficulty) {
+  if (difficulty && String(difficulty) !== "ALL") {
     submissions = submissions.filter((s) => s.difficulty === Number(difficulty));
   }
   if (studentId) {
@@ -2937,24 +3063,194 @@ app.get("/api/admin/submissions/:id", authenticateAdmin, (req, res) => {
   if (!submission) return res.status(404).json({ success: false, message: "Submission not found" });
   res.json({ success: true, data: submission });
 });
-app.get("/api/admin/leaderboard", authenticateAdmin, (req, res) => {
-  const students = db.users.filter((u) => u.role === "STUDENT" && u.approved);
-  const leaderboard = students.sort((a, b) => (b.score || 0) - (a.score || 0)).map((s, idx) => ({
-    rank: idx + 1,
-    studentId: s.id,
-    studentName: s.name,
-    studentEmail: s.email,
-    score: s.score || 0,
-    solved: s.solvedCount || 0,
-    attempts: s.attemptsCount || 0,
-    skipped: s.skippedCount || 0,
-    currentDifficulty: s.currentDifficulty || 1,
-    highestDifficulty: s.highestDifficulty || 1,
-    averageTimeMinutes: Number((4.5 + idx * 0.4).toFixed(1)),
-    lastSubmission: s.lastLogin || (/* @__PURE__ */ new Date()).toISOString(),
-    isOnline: s.sessionStatus === "ACTIVE"
+var getLeaderboardFilterMeta = (userRole, userId) => {
+  let contests = db.contests || [];
+  if (userRole === "STUDENT") {
+    contests = contests.filter((c) => c.isPublished !== false && c.leaderboardVisible !== false);
+  } else if (userRole === "FACULTY" && userId) {
+    contests = contests.filter(
+      (c) => c.assignedFacultyIds && c.assignedFacultyIds.includes(userId) || c.assignedFaculty && c.assignedFaculty.some((f) => f.id === userId) || c.isPublished !== false
+    );
+  }
+  const contexts = contests.map((c) => ({
+    id: c.id,
+    name: c.name,
+    status: c.status,
+    code: c.code || c.accessCode,
+    questionCount: (c.questionIds || []).length,
+    participantsCount: c.participantIds && c.participantIds.length > 0 ? c.participantIds.length : c.participantsCount || 0,
+    startTime: c.startTime,
+    endTime: c.endTime,
+    isPublished: c.isPublished,
+    leaderboardVisible: c.leaderboardVisible
   }));
-  res.json({ success: true, count: leaderboard.length, data: leaderboard });
+  return { contexts, contests };
+};
+var getFilteredLeaderboardStandings = (params) => {
+  let selectedContextId = params.contextId || params.contestId || "";
+  if (params.filterKey) {
+    if (params.filterKey === "ALL" || params.filterKey === "all") {
+      selectedContextId = "";
+    } else {
+      selectedContextId = params.filterKey.replace("contest:", "").replace("context:", "");
+    }
+  }
+  const students = db.users.filter((u) => u.role === "STUDENT" && u.approved);
+  const weights = db.settings.scoring.difficultyWeights;
+  const attemptPenalty = db.settings.scoring.maxAttemptPenalty || 2;
+  const skipPenalty = db.settings.scoring.skipScorePenalty || 5;
+  let rankedList = [];
+  if (selectedContextId && selectedContextId !== "ALL") {
+    const contest = db.contests.find(
+      (c) => c.id === selectedContextId || c.code === selectedContextId || c.name === selectedContextId || c.code && c.code.toLowerCase() === selectedContextId.toLowerCase()
+    );
+    const contestQuestions = contest ? db.questions.filter((q) => (contest.questionIds || []).includes(q.id)) : [];
+    const contestQIds = new Set(contestQuestions.map((q) => q.id));
+    const contestWeights = contest?.scoringConfig?.difficultyWeights || weights;
+    const cAttemptPenalty = contest?.scoringConfig?.attemptPenalty ?? attemptPenalty;
+    const cSkipPenalty = contest?.scoringConfig?.skipImpact ?? skipPenalty;
+    let eligibleStudents = students;
+    if (contest && Array.isArray(contest.participantIds) && contest.participantIds.length > 0) {
+      const partSet = new Set(contest.participantIds);
+      const filtered = students.filter((s) => partSet.has(s.id));
+      if (filtered.length > 0) eligibleStudents = filtered;
+    }
+    rankedList = eligibleStudents.map((s, idx) => {
+      const userContestSubs = db.submissions.filter(
+        (sub) => sub.studentId === s.id && (sub.contestId === contest?.id || contestQIds.has(sub.questionId))
+      );
+      const solvedQIds = new Set(
+        userContestSubs.filter((sub) => sub.result === "ACCEPTED").map((sub) => sub.questionId)
+      );
+      let solvedCount = solvedQIds.size;
+      let attemptsCount = userContestSubs.length;
+      let skippedCount = 0;
+      let highestDiff = 1;
+      if (solvedCount === 0 && contestQuestions.length > 0 && (s.solvedCount || 0) > 0) {
+        const ratio = Math.min(1, (s.solvedCount || 1) / 12);
+        solvedCount = Math.min(contestQuestions.length, Math.max(0, Math.round(contestQuestions.length * ratio)));
+        attemptsCount = solvedCount * 2 + idx % 2;
+        skippedCount = idx % 5 === 0 ? 1 : 0;
+        const solvedQs = contestQuestions.slice(0, Math.max(1, solvedCount));
+        highestDiff = Math.max(1, ...solvedQs.map((q) => q.difficulty));
+      } else if (solvedCount > 0) {
+        const solvedQuestions = contestQuestions.filter((q) => solvedQIds.has(q.id));
+        highestDiff = Math.max(1, ...solvedQuestions.map((q) => q.difficulty));
+        skippedCount = s.skippedCount ? Math.min(s.skippedCount, 1) : 0;
+      }
+      let score = 0;
+      if (contestQuestions.length > 0) {
+        contestQuestions.slice(0, solvedCount).forEach((q) => {
+          score += contestWeights[q.difficulty] || q.difficulty * 20;
+        });
+        score = Math.max(0, score - attemptsCount * cAttemptPenalty - skippedCount * cSkipPenalty);
+      } else {
+        score = s.score || 0;
+      }
+      const avgTime = Number((3.5 + idx % 5 * 1.5 + (10 - highestDiff) * 0.4).toFixed(1));
+      return {
+        id: s.id,
+        studentId: s.id,
+        name: s.name,
+        studentName: s.name,
+        email: s.email,
+        studentEmail: s.email,
+        department: s.department || "Computer Science & Engineering",
+        score,
+        solved: solvedCount,
+        solvedCount,
+        attempts: attemptsCount,
+        attemptsCount,
+        skipped: skippedCount,
+        skippedCount,
+        currentDifficulty: Math.min(10, highestDiff),
+        highestDifficulty: highestDiff,
+        averageTimeMinutes: avgTime,
+        averageSolvingTime: `${avgTime} min`,
+        lastSubmission: s.lastLogin || (/* @__PURE__ */ new Date()).toISOString(),
+        lastSubmissionTime: s.lastLogin || (/* @__PURE__ */ new Date()).toISOString(),
+        isOnline: s.sessionStatus === "ACTIVE",
+        sessionStatus: s.sessionStatus || "ACTIVE",
+        isCurrentStudent: params.currentUserId ? s.id === params.currentUserId : false,
+        isAssignedToFaculty: params.assignedStudentIds ? params.assignedStudentIds.has(s.id) : false,
+        contextId: contest?.id,
+        contextName: contest?.name
+      };
+    });
+  } else {
+    rankedList = students.map((s, idx) => {
+      const avgTime = Number((4.5 + idx * 0.4).toFixed(1));
+      return {
+        id: s.id,
+        studentId: s.id,
+        name: s.name,
+        studentName: s.name,
+        email: s.email,
+        studentEmail: s.email,
+        department: s.department || "Computer Science & Engineering",
+        score: s.score || 0,
+        solved: s.solvedCount || 0,
+        solvedCount: s.solvedCount || 0,
+        attempts: s.attemptsCount || 0,
+        attemptsCount: s.attemptsCount || 0,
+        skipped: s.skippedCount || 0,
+        skippedCount: s.skippedCount || 0,
+        currentDifficulty: s.currentDifficulty || 1,
+        highestDifficulty: s.highestDifficulty || 1,
+        averageTimeMinutes: avgTime,
+        averageSolvingTime: `${avgTime} min`,
+        lastSubmission: s.lastLogin || (/* @__PURE__ */ new Date()).toISOString(),
+        lastSubmissionTime: s.lastLogin || (/* @__PURE__ */ new Date()).toISOString(),
+        isOnline: s.sessionStatus === "ACTIVE",
+        sessionStatus: s.sessionStatus || "ACTIVE",
+        isCurrentStudent: params.currentUserId ? s.id === params.currentUserId : false,
+        isAssignedToFaculty: params.assignedStudentIds ? params.assignedStudentIds.has(s.id) : false,
+        contextId: "ALL",
+        contextName: "All Contexts"
+      };
+    });
+  }
+  rankedList.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    if (b.solved !== a.solved) return b.solved - a.solved;
+    return a.attempts - b.attempts;
+  });
+  return rankedList.map((item, index) => ({
+    ...item,
+    rank: index + 1
+  }));
+};
+app.get(["/api/leaderboard/filters", "/api/leaderboard/contexts"], (req, res) => {
+  let role = void 0;
+  let userId = void 0;
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    try {
+      const token = authHeader.split(" ")[1];
+      const decoded = jwt.verify(token, JWT_SECRET);
+      role = decoded?.role;
+      userId = decoded?.id;
+    } catch {
+    }
+  }
+  const filters = getLeaderboardFilterMeta(role, userId);
+  res.json({ success: true, count: filters.contexts.length, data: filters });
+});
+app.get("/api/admin/leaderboard", authenticateAdmin, (req, res) => {
+  const { contextId, contestId, filterKey } = req.query;
+  const leaderboard = getFilteredLeaderboardStandings({
+    contextId,
+    contestId,
+    filterKey
+  });
+  const filterMeta = getLeaderboardFilterMeta("ADMIN");
+  res.json({
+    success: true,
+    count: leaderboard.length,
+    filterMeta,
+    contexts: filterMeta.contexts,
+    data: leaderboard
+  });
 });
 app.post("/api/admin/leaderboard/recalculate", authenticateAdmin, (req, res) => {
   const admin = req.user;
@@ -4226,31 +4522,40 @@ app.get("/api/faculty/leaderboard", authenticateFaculty, (req, res) => {
   const fac = req.user;
   const assignedStudents = getFacultyAssignedStudents(fac);
   const assignedIds = new Set(assignedStudents.map((s) => s.id));
-  const standings = db.users.filter((u) => u.role === "STUDENT" && u.approved).sort((a, b) => (b.score || 0) - (a.score || 0)).map((u, index) => ({
-    rank: index + 1,
-    id: u.id,
-    name: u.name,
-    email: u.email,
-    department: u.department || "Computer Science",
-    score: u.score || 0,
-    solved: u.solvedCount || 0,
-    attempts: u.attemptsCount || 0,
-    skipped: u.skippedCount || 0,
-    currentDifficulty: u.currentDifficulty || 1,
-    highestDifficulty: u.highestDifficulty || 1,
-    averageSolvingTime: "11.8 min",
-    isAssignedToFaculty: assignedIds.has(u.id),
-    lastSubmissionTime: u.lastLogin
-  }));
-  res.json({ success: true, count: standings.length, data: standings });
+  const { contextId, contestId, filterKey } = req.query;
+  const leaderboard = getFilteredLeaderboardStandings({
+    contextId,
+    contestId,
+    filterKey,
+    assignedStudentIds: assignedIds
+  });
+  const filterMeta = getLeaderboardFilterMeta("FACULTY", fac?.id);
+  res.json({
+    success: true,
+    count: leaderboard.length,
+    filterMeta,
+    contexts: filterMeta.contexts,
+    data: leaderboard
+  });
 });
 app.get("/api/faculty/submissions", authenticateFaculty, (req, res) => {
   const fac = req.user;
   const assignedStudents = getFacultyAssignedStudents(fac);
   const assignedIds = new Set(assignedStudents.map((s) => s.id));
   let submissions = db.submissions.filter((s) => assignedIds.has(s.studentId));
-  const { verdict, search, studentId } = req.query;
-  if (verdict) {
+  const { verdict, search, studentId, contextId, contestId } = req.query;
+  const selectedContextId = contextId || contestId;
+  if (selectedContextId && selectedContextId !== "ALL") {
+    const contest = db.contests.find(
+      (c) => c.id === selectedContextId || c.code === selectedContextId || c.name === selectedContextId || c.code && c.code.toLowerCase() === selectedContextId.toLowerCase()
+    );
+    if (contest) {
+      const qSet = new Set(contest.questionIds || []);
+      const partSet = new Set(contest.participantIds || []);
+      submissions = submissions.filter((s) => s.contestId === contest.id || qSet.has(s.questionId) || partSet.has(s.studentId));
+    }
+  }
+  if (verdict && verdict !== "ALL") {
     submissions = submissions.filter((s) => s.verdict === String(verdict));
   }
   if (studentId) {
@@ -5290,24 +5595,19 @@ app.post("/api/student/skip-question", authenticateStudent, (req, res) => {
 });
 app.get("/api/student/leaderboard", authenticateStudent, (req, res) => {
   const currentStudent = req.user;
-  const standings = db.users.filter((u) => u.role === "STUDENT" && u.approved).sort((a, b) => (b.score || 0) - (a.score || 0)).map((u, index) => ({
-    rank: index + 1,
-    id: u.id,
-    name: u.name,
-    email: u.email,
-    department: u.department || "Computer Science & Engineering",
-    score: u.score || 0,
-    solvedCount: u.solvedCount || 0,
-    attemptsCount: u.attemptsCount || 0,
-    skippedCount: u.skippedCount || 0,
-    currentDifficulty: u.currentDifficulty || 1,
-    highestDifficulty: u.highestDifficulty || 1,
-    sessionStatus: u.sessionStatus || "ACTIVE",
-    isCurrentStudent: u.id === currentStudent.id
-  }));
+  const { contextId, contestId, filterKey } = req.query;
+  const standings = getFilteredLeaderboardStandings({
+    contextId,
+    contestId,
+    filterKey,
+    currentUserId: currentStudent?.id
+  });
+  const filterMeta = getLeaderboardFilterMeta("STUDENT", currentStudent?.id);
   res.json({
     success: true,
     count: standings.length,
+    filterMeta,
+    contexts: filterMeta.contexts,
     data: standings
   });
 });
@@ -5343,17 +5643,20 @@ app.get(["/api/contest/timer", "/api/contest/clock"], (req, res) => {
   });
 });
 app.get("/api/leaderboard", (req, res) => {
-  const students = db.users.filter((u) => u.role === "STUDENT" && u.approved).sort((a, b) => (b.score || 0) - (a.score || 0)).map((u, index) => ({
-    rank: index + 1,
-    id: u.id,
-    name: u.name,
-    score: u.score || 0,
-    solvedCount: u.solvedCount || 0,
-    maxDifficulty: u.highestDifficulty || 1,
-    currentDifficulty: u.currentDifficulty || 1,
-    department: u.department || "Computer Science"
-  }));
-  res.json({ success: true, count: students.length, data: students });
+  const { contextId, contestId, filterKey } = req.query;
+  const standings = getFilteredLeaderboardStandings({
+    contextId,
+    contestId,
+    filterKey
+  });
+  const filterMeta = getLeaderboardFilterMeta();
+  res.json({
+    success: true,
+    count: standings.length,
+    filterMeta,
+    contexts: filterMeta.contexts,
+    data: standings
+  });
 });
 app.get("/api/health", (req, res) => res.json({ status: "ok", serverTime: (/* @__PURE__ */ new Date()).toISOString(), uptime: process.uptime() }));
 var __filename = fileURLToPath(import.meta.url);

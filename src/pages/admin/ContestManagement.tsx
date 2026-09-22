@@ -36,6 +36,7 @@ import { Contest, ContestStatus, User } from '../../types/admin';
 import { formatDate } from '../../lib/exportUtils';
 import { useToast } from '../../context/AdminToastContext';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
+import AssignFacultyDropdown from '../../components/admin/AssignFacultyDropdown';
 
 export default function ContestManagement() {
   const [contests, setContests] = useState<Contest[]>([]);
@@ -535,21 +536,24 @@ export default function ContestManagement() {
                       <div className="flex items-center gap-2 min-w-0">
                         <UserCheck className="w-4 h-4 text-purple-400 shrink-0" />
                         <div className="text-xs truncate">
-                          <span className="text-slate-400 font-medium mr-1.5">Supervisors:</span>
+                          <span className="text-slate-400 font-medium mr-1.5">Supervisor:</span>
                           {c.assignedFaculty && c.assignedFaculty.length > 0 ? (
                             <span className="font-bold text-purple-300">
-                              {c.assignedFaculty.map((f: any) => f.name).join(', ')}
+                              {c.assignedFaculty
+                                .map((f: any) => `${f.name}${f.employeeId ? ` (${f.employeeId})` : ''}`)
+                                .join(', ')}
                             </span>
                           ) : (
-                            <span className="text-slate-500 italic">No faculty assigned</span>
+                            <span className="text-slate-500 italic">No faculty supervisor assigned</span>
                           )}
                         </div>
                       </div>
                       <button
                         onClick={() => openAssignModal(c)}
-                        className="px-2.5 py-1 rounded-lg bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30 text-[11px] font-bold shrink-0 transition-all"
+                        className="px-2.5 py-1 rounded-lg bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30 text-[11px] font-bold shrink-0 transition-all flex items-center gap-1"
                       >
-                        Assign
+                        <UserCheck className="w-3 h-3" />
+                        {c.assignedFaculty && c.assignedFaculty.length > 0 ? 'Change' : 'Assign'}
                       </button>
                     </div>
 
@@ -685,91 +689,38 @@ export default function ContestManagement() {
 
       {/* QUICK FACULTY ASSIGNMENT MODAL */}
       {assignModalOpen && assignContest && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div>
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
                   <UserCheck className="w-5 h-5 text-purple-400" /> Assign Faculty Supervisors
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Contest: <b className="text-white">{assignContest.name}</b>
+                  Target Competition: <b className="text-white">{assignContest.name}</b> <span className="font-mono text-purple-300">({assignContest.code || assignContest.id})</span>
                 </p>
               </div>
               <button
                 onClick={() => setAssignModalOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800"
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-3">
-              <div className="text-xs text-slate-300">
-                Select one or more faculty members to grant supervisor access:
-              </div>
-
-              <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
-                {availableFaculty.length === 0 ? (
-                  <p className="text-xs text-slate-500 py-4 text-center">No faculty members found in directory.</p>
-                ) : (
-                  availableFaculty.map((fac) => {
-                    const isSelected = selectedFacultyForAssign.includes(fac.id);
-                    return (
-                      <label
-                        key={fac.id}
-                        className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer text-xs ${
-                          isSelected
-                            ? 'bg-purple-600/20 border-purple-500/50 text-white'
-                            : 'bg-slate-800/50 border-slate-800 hover:border-slate-700 text-slate-300'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => {
-                            if (isSelected) {
-                              setSelectedFacultyForAssign(selectedFacultyForAssign.filter((id) => id !== fac.id));
-                            } else {
-                              setSelectedFacultyForAssign([...selectedFacultyForAssign, fac.id]);
-                            }
-                          }}
-                          className="mt-0.5 rounded bg-slate-700 border-slate-600 text-purple-600 focus:ring-0"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <div className="font-bold text-white truncate">{fac.name}</div>
-                          <div className="text-slate-400 text-[11px] truncate">{fac.email}</div>
-                          <div className="text-purple-300 text-[10px] mt-0.5">{fac.department || 'Computer Science'}</div>
-                        </div>
-                      </label>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between pt-3 border-t border-slate-800">
-              <span className="text-xs font-bold text-purple-400">
-                {selectedFacultyForAssign.length} Faculty Selected
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setAssignModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={assigningFaculty}
-                  onClick={handleSaveFacultyAssignment}
-                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold shadow-lg shadow-purple-600/25"
-                >
-                  {assigningFaculty ? 'Saving...' : 'Save Supervisors'}
-                </button>
-              </div>
-            </div>
+            <AssignFacultyDropdown
+              contestId={assignContest.id}
+              contestName={assignContest.name}
+              selectedFacultyIds={selectedFacultyForAssign}
+              onChange={(ids) => setSelectedFacultyForAssign(ids)}
+              onAssignedSuccess={() => {
+                setAssignModalOpen(false);
+                fetchContestsAndFaculty();
+              }}
+              showSaveButton={true}
+              title="Supervisor Directory & Permissions"
+              description="Assigned faculty supervisors will receive proctoring authority, live student telemetry, anomaly flags, and code inspection access for this contest only."
+            />
           </div>
         </div>
       )}
