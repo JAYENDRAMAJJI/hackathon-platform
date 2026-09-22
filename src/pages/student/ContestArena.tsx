@@ -373,25 +373,25 @@ export default function ContestArena() {
       </div>
 
       {/* Main Workspace Split */}
-      <div className="flex-1 flex overflow-hidden bg-slate-50">
+      <div className="flex-1 flex overflow-hidden bg-slate-950">
         {/* Left Panel: Problem Description / Execution Result */}
-        <div className="w-1/3 min-w-[380px] max-w-[540px] flex flex-col border-r border-slate-200 bg-white">
-          <div className="flex border-b border-slate-200 bg-slate-50 shrink-0">
+        <div className="w-1/3 min-w-[380px] max-w-[540px] flex flex-col border-r border-slate-800 bg-slate-900 text-slate-100">
+          <div className="flex border-b border-slate-800 bg-slate-950/60 shrink-0">
             <button
-              className={`flex-1 py-3 text-xs font-bold border-b-2 transition-colors ${
+              className={`flex-1 py-3 text-xs transition-colors cursor-pointer ${
                 activeTab === 'problem'
-                  ? 'border-blue-600 text-blue-600 bg-white shadow-xs'
-                  : 'border-transparent text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                  ? 'border-b-2 border-blue-500 text-white bg-slate-900 font-bold'
+                  : 'border-b-2 border-transparent text-slate-400 hover:text-white hover:bg-slate-800/40 font-semibold'
               }`}
               onClick={() => setActiveTab('problem')}
             >
               Problem Description
             </button>
             <button
-              className={`flex-1 py-3 text-xs font-bold border-b-2 transition-colors ${
+              className={`flex-1 py-3 text-xs transition-colors cursor-pointer ${
                 activeTab === 'result'
-                  ? 'border-blue-600 text-blue-600 bg-white shadow-xs'
-                  : 'border-transparent text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                  ? 'border-b-2 border-blue-500 text-white bg-slate-900 font-bold'
+                  : 'border-b-2 border-transparent text-slate-400 hover:text-white hover:bg-slate-800/40 font-semibold'
               }`}
               onClick={() => setActiveTab('result')}
             >
@@ -404,12 +404,12 @@ export default function ContestArena() {
               <div className="space-y-6">
                 <div>
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xs font-bold uppercase tracking-wider text-blue-600">
+                    <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">
                       Level {question?.difficulty} • {question?.category}
                     </span>
                   </div>
-                  <h2 className="text-2xl font-black text-slate-900 tracking-tight">{question?.title}</h2>
-                  <div className="prose prose-slate prose-sm max-w-none text-slate-700 whitespace-pre-wrap font-sans mt-3 leading-relaxed">
+                  <h2 className="text-2xl font-extrabold text-white tracking-tight">{question?.title}</h2>
+                  <div className="text-slate-300 whitespace-pre-wrap font-sans mt-3 leading-relaxed text-sm">
                     {question?.problemStatement}
                   </div>
                 </div>
@@ -417,8 +417,8 @@ export default function ContestArena() {
                 {/* Function Signature */}
                 {question?.functionSignature && (
                   <div className="space-y-1.5">
-                    <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wider">Kotlin Signature</h3>
-                    <div className="bg-slate-900 text-blue-300 p-3 rounded-xl text-xs font-mono border border-slate-800">
+                    <h3 className="font-bold text-slate-400 text-xs uppercase tracking-wider">Kotlin Signature</h3>
+                    <div className="bg-slate-950 text-blue-300 p-3 rounded-xl text-xs font-mono border border-slate-800">
                       {question.functionSignature}
                     </div>
                   </div>
@@ -427,8 +427,8 @@ export default function ContestArena() {
                 {/* Constraints */}
                 {question?.constraints && (
                   <div className="space-y-1.5">
-                    <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wider">Constraints</h3>
-                    <div className="bg-slate-50 p-3 rounded-xl text-xs font-mono text-slate-700 border border-slate-200 whitespace-pre-wrap">
+                    <h3 className="font-bold text-slate-400 text-xs uppercase tracking-wider">Constraints</h3>
+                    <div className="bg-slate-950/60 p-3 rounded-xl text-xs font-mono text-slate-300 border border-slate-800 whitespace-pre-wrap">
                       {question.constraints}
                     </div>
                   </div>
@@ -437,29 +437,29 @@ export default function ContestArena() {
                 {/* Visible Examples */}
                 {question?.examples && question.examples.length > 0 && (
                   <div className="space-y-4">
-                    <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wider">Sample Test Cases</h3>
+                    <h3 className="font-bold text-slate-400 text-xs uppercase tracking-wider">Sample Test Cases</h3>
                     {question.examples.map((ex: any, idx: number) => (
-                      <div key={idx} className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                        <p className="text-[11px] font-bold text-slate-500 mb-1 uppercase tracking-wider">
+                      <div key={idx} className="bg-slate-950/40 p-4 rounded-xl border border-slate-800 space-y-2">
+                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                           Sample Case {idx + 1}
                         </p>
                         <div className="space-y-2 mt-2">
                           <div>
                             <span className="text-[10px] text-slate-400 font-bold uppercase block">Input</span>
-                            <pre className="text-xs font-mono text-slate-900 bg-white p-2 rounded-lg border border-slate-200">
+                            <pre className="text-xs font-mono text-slate-200 bg-slate-950 p-2.5 rounded-lg border border-slate-800">
                               {ex.input}
                             </pre>
                           </div>
                           <div>
                             <span className="text-[10px] text-slate-400 font-bold uppercase block">Expected Output</span>
-                            <pre className="text-xs font-mono text-slate-900 bg-white p-2 rounded-lg border border-slate-200">
+                            <pre className="text-xs font-mono text-slate-200 bg-slate-950 p-2.5 rounded-lg border border-slate-800">
                               {ex.output}
                             </pre>
                           </div>
                         </div>
                         {ex.explanation && (
-                          <p className="text-xs text-slate-600 mt-2.5 pt-2.5 border-t border-slate-200/80">
-                            <span className="font-bold">Explanation:</span> {ex.explanation}
+                          <p className="text-xs text-slate-400 mt-2.5 pt-2.5 border-t border-slate-800/80">
+                            <span className="font-bold text-slate-300">Explanation:</span> {ex.explanation}
                           </p>
                         )}
                       </div>
@@ -470,68 +470,68 @@ export default function ContestArena() {
             ) : (
               <div className="space-y-4 h-full flex flex-col justify-center">
                 {isExecuting ? (
-                  <div className="flex flex-col items-center justify-center text-center space-y-4 text-slate-500 py-12">
-                    <div className="w-10 h-10 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                    <p className="font-bold text-sm animate-pulse text-slate-700">
+                  <div className="flex flex-col items-center justify-center text-center space-y-4 text-slate-400 py-12">
+                    <div className="w-10 h-10 border-3 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                    <p className="font-bold text-sm animate-pulse text-slate-300">
                       Compiling and executing Kotlin in isolated sandbox...
                     </p>
                   </div>
                 ) : result ? (
                   <div className="space-y-6">
                     {result.status === 'SUCCESS' || result.verdict === 'ACCEPTED' ? (
-                      <div className="bg-linear-to-b from-emerald-50 to-white border-2 border-emerald-300 rounded-2xl p-6 text-center shadow-md animate-in zoom-in-95">
-                        <div className="w-16 h-16 rounded-full bg-emerald-500 text-white flex items-center justify-center mx-auto mb-4 shadow-md shadow-emerald-500/30">
+                      <div className="bg-gradient-to-b from-emerald-950/40 to-slate-900 border-2 border-emerald-500/50 rounded-2xl p-6 text-center shadow-xl animate-in zoom-in-95">
+                        <div className="w-16 h-16 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-emerald-500/25">
                           <CheckCircle className="w-9 h-9" />
                         </div>
-                        <h3 className="text-2xl font-black text-emerald-950 mb-1">Accepted!</h3>
-                        <p className="text-emerald-700 text-sm font-semibold mb-4">{result.message}</p>
-                        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-100/80 border border-emerald-300 text-emerald-900 font-bold text-sm">
-                          <Sparkles className="w-4 h-4 text-emerald-600" />
+                        <h3 className="text-2xl font-extrabold text-white mb-1">Accepted!</h3>
+                        <p className="text-emerald-400 text-sm font-semibold mb-4">{result.message}</p>
+                        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 font-bold text-sm">
+                          <Sparkles className="w-4 h-4 text-emerald-400" />
                           <span>+{result.scoreAdded || 20} Points Awarded</span>
                         </div>
 
-                        <div className="flex justify-center gap-6 mt-6 pt-6 border-t border-emerald-200 text-xs">
+                        <div className="flex justify-center gap-6 mt-6 pt-6 border-t border-slate-800 text-xs">
                           <div>
                             <span className="text-slate-400 block uppercase font-bold text-[10px]">Execution Time</span>
-                            <span className="font-mono font-bold text-slate-800">{result.time || '34 ms'}</span>
+                            <span className="font-mono font-bold text-white">{result.time || '34 ms'}</span>
                           </div>
                           <div>
                             <span className="text-slate-400 block uppercase font-bold text-[10px]">Memory Used</span>
-                            <span className="font-mono font-bold text-slate-800">{result.memory || '14.2 MB'}</span>
+                            <span className="font-mono font-bold text-white">{result.memory || '14.2 MB'}</span>
                           </div>
                           <div>
                             <span className="text-slate-400 block uppercase font-bold text-[10px]">Promoted Level</span>
-                            <span className="font-mono font-bold text-blue-600">Level {result.nextDifficulty || session.currentDifficulty}</span>
+                            <span className="font-mono font-bold text-blue-400">Level {result.nextDifficulty || session.currentDifficulty}</span>
                           </div>
                         </div>
 
                         <Button
                           onClick={loadContestState}
-                          className="mt-6 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3 rounded-xl shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2"
+                          className="mt-6 w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-xl shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-2 cursor-pointer transition-all"
                         >
                           Next Challenge <SkipForward className="w-4 h-4" />
                         </Button>
                       </div>
                     ) : (
-                      <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 shadow-sm">
+                      <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-6 shadow-xl">
                         <div className="flex items-center gap-3 mb-4">
                           {result.status === 'PASSED' ? (
-                            <CheckCircle className="w-6 h-6 text-emerald-500" />
+                            <CheckCircle className="w-6 h-6 text-emerald-400" />
                           ) : (
-                            <XCircle className="w-6 h-6 text-rose-500" />
+                            <XCircle className="w-6 h-6 text-rose-400" />
                           )}
                           <h3
-                            className={`font-black text-base ${
-                              result.status === 'PASSED' ? 'text-emerald-700' : 'text-rose-700'
+                            className={`font-extrabold text-base ${
+                              result.status === 'PASSED' ? 'text-emerald-400' : 'text-rose-400'
                             }`}
                           >
                             {result.status === 'PASSED' ? 'Visible Tests Passed' : result.status || 'Execution Failed'}
                           </h3>
                         </div>
 
-                        <div className="bg-white border border-slate-200 rounded-xl p-4 font-mono text-xs space-y-2">
-                          <p className="text-slate-500 border-b border-slate-100 pb-2 font-bold">Execution Metrics</p>
-                          <div className="flex gap-6 text-slate-700">
+                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 font-mono text-xs space-y-2 text-slate-300">
+                          <p className="text-slate-400 border-b border-slate-800 pb-2 font-bold">Execution Metrics</p>
+                          <div className="flex gap-6 text-slate-300">
                             <div>
                               <span className="text-slate-400">Time:</span> {result.executionTime || result.time || '24 ms'}
                             </div>
@@ -545,8 +545,8 @@ export default function ContestArena() {
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center text-center space-y-3 text-slate-400 py-12">
-                    <TerminalIcon className="w-12 h-12 text-slate-300" />
-                    <p className="text-sm font-semibold text-slate-600">Ready for Execution</p>
+                    <TerminalIcon className="w-12 h-12 text-slate-700" />
+                    <p className="text-sm font-bold text-slate-300">Ready for Execution</p>
                     <p className="text-xs text-slate-400 max-w-xs">
                       Run code against visible tests or submit solution for formal automated grading.
                     </p>
@@ -658,32 +658,35 @@ export default function ContestArena() {
 
       {/* Skip Confirmation Modal */}
       {showSkipModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 max-w-md w-full shadow-2xl space-y-4">
-            <div className="flex items-center gap-3 text-amber-600 dark:text-amber-400">
-              <AlertTriangle className="w-6 h-6" />
-              <h3 className="font-extrabold text-lg text-slate-900 dark:text-white">Skip Current Question?</h3>
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-slate-900 rounded-3xl border border-slate-800 p-6 max-w-md w-full shadow-2xl space-y-4 text-white">
+            <div className="flex items-center gap-3 text-amber-400">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-amber-400" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-lg text-white">Skip Current Challenge?</h3>
+                <p className="text-xs text-slate-400">Level {question?.difficulty} • Penalty Rule</p>
+              </div>
             </div>
-            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-              Per competition rules, skipping this problem will apply a <b className="text-rose-600 font-bold">5 point deduction</b> from your total score and advance you to the next available question at Level {question?.difficulty}.
+            <p className="text-xs text-slate-300 leading-relaxed bg-slate-800/40 p-3 rounded-xl border border-slate-800">
+              Per competition rules, skipping this problem will apply a <b className="text-rose-400 font-bold">5 point deduction</b> from your total tournament score and advance you to the next challenge at Level {question?.difficulty}.
             </p>
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-              <Button
-                variant="outline"
-                size="sm"
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+              <button
+                type="button"
                 onClick={() => setShowSkipModal(false)}
-                className="text-xs"
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
               >
                 Cancel
-              </Button>
-              <Button
-                size="sm"
+              </button>
+              <button
                 disabled={skipping}
                 onClick={handleConfirmSkip}
-                className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold"
+                className="bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-lg shadow-rose-600/20 cursor-pointer disabled:opacity-50 transition-all"
               >
                 {skipping ? 'Skipping...' : 'Confirm Skip (-5 pts)'}
-              </Button>
+              </button>
             </div>
           </div>
         </div>
