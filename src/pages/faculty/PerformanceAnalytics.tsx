@@ -28,7 +28,11 @@ export default function PerformanceAnalytics() {
   const fetchAnalytics = async (isManual = false) => {
     try {
       setRefreshing(true);
-      const resp = await apiClient.get('/faculty/analytics/performance');
+      const minDelay = isManual ? new Promise((r) => setTimeout(r, 600)) : Promise.resolve();
+      const [resp] = await Promise.all([
+        apiClient.get('/faculty/analytics/performance'),
+        minDelay,
+      ]);
       if (resp.success && resp.data) {
         setData(resp.data);
         if (isManual) {

@@ -46,12 +46,14 @@ export default function FacultyManagement() {
 
   const toast = useToast();
 
-  const fetchData = async () => {
+  const fetchData = async (isManual = false) => {
     setLoading(true);
     try {
+      const minDelay = isManual ? new Promise((r) => setTimeout(r, 600)) : Promise.resolve();
       const [facResp, stuResp] = await Promise.all([
         apiClient.get('/admin/faculty'),
         apiClient.get('/admin/students'),
+        minDelay,
       ]);
 
       if (facResp.success && facResp.data) {
@@ -59,6 +61,9 @@ export default function FacultyManagement() {
       }
       if (stuResp.success && stuResp.data) {
         setAllStudents(stuResp.data);
+      }
+      if (isManual) {
+        toast.success('Faculty supervisors and assigned cohorts refreshed');
       }
     } catch (err: any) {
       toast.error(err.message || 'Failed to fetch faculty records');
@@ -165,8 +170,10 @@ export default function FacultyManagement() {
             <PlusCircle className="w-4 h-4" /> Add Faculty Member
           </button>
           <button
-            onClick={fetchData}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all shadow-sm"
+            onClick={() => fetchData(true)}
+            disabled={loading}
+            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all shadow-sm disabled:opacity-50 cursor-pointer"
+            title="Refresh Faculty Roster"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-purple-400' : ''}`} />
           </button>

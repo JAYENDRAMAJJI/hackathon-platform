@@ -64,12 +64,14 @@ export default function ContestManagement() {
   const toast = useToast();
   const navigate = useNavigate();
 
-  const fetchContestsAndFaculty = async () => {
+  const fetchContestsAndFaculty = async (isManual = false) => {
     setLoading(true);
     try {
+      const minDelay = isManual ? new Promise((r) => setTimeout(r, 600)) : Promise.resolve();
       const [contestResp, facResp] = await Promise.all([
         apiClient.get('/admin/contests'),
         apiClient.get('/admin/faculty'),
+        minDelay,
       ]);
 
       if (contestResp.success && contestResp.data) {
@@ -77,6 +79,9 @@ export default function ContestManagement() {
       }
       if (facResp.success && facResp.data) {
         setAvailableFaculty(facResp.data);
+      }
+      if (isManual) {
+        toast.success('Contests and supervisory roster refreshed');
       }
     } catch (err: any) {
       toast.error(err.message || 'Failed to fetch contests');
@@ -280,8 +285,9 @@ export default function ContestManagement() {
             <PlusCircle className="w-4 h-4" /> Create New Contest
           </Link>
           <button
-            onClick={fetchContestsAndFaculty}
-            className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all shadow-sm"
+            onClick={() => fetchContestsAndFaculty(true)}
+            disabled={loading}
+            className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all shadow-sm disabled:opacity-50 cursor-pointer"
             title="Refresh Contests"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-blue-400' : ''}`} />

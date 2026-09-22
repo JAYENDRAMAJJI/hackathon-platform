@@ -49,17 +49,24 @@ export default function UserManagement() {
   const toast = useToast();
   const navigate = useNavigate();
 
-  const fetchUsers = async () => {
+  const fetchUsers = async (isManual = false) => {
     setLoading(true);
     try {
+      const minDelay = isManual ? new Promise((r) => setTimeout(r, 600)) : Promise.resolve();
       const params: Record<string, string> = {};
       if (search) params.search = search;
       if (roleFilter !== 'ALL') params.role = roleFilter;
       if (statusFilter !== 'ALL') params.status = statusFilter;
 
-      const resp = await apiClient.get('/admin/users', params);
+      const [resp] = await Promise.all([
+        apiClient.get('/admin/users', params),
+        minDelay,
+      ]);
       if (resp.success && resp.data) {
         setUsers(resp.data);
+      }
+      if (isManual) {
+        toast.success('User directory refreshed');
       }
     } catch (err: any) {
       toast.error(err.message || 'Failed to fetch users');
@@ -226,8 +233,9 @@ export default function UserManagement() {
             <Download className="w-4 h-4 text-blue-400" /> Export CSV
           </button>
           <button
-            onClick={fetchUsers}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all shadow-sm"
+            onClick={() => fetchUsers(true)}
+            disabled={loading}
+            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all shadow-sm disabled:opacity-50 cursor-pointer"
             title="Refresh List"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-blue-400' : ''}`} />

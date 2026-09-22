@@ -28,7 +28,11 @@ export default function AnalyticsDashboard() {
   const fetchAnalytics = async (isManual = false) => {
     setLoading(true);
     try {
-      const resp = await apiClient.get('/admin/analytics');
+      const minDelay = isManual ? new Promise((r) => setTimeout(r, 600)) : Promise.resolve();
+      const [resp] = await Promise.all([
+        apiClient.get('/admin/analytics'),
+        minDelay,
+      ]);
       if (resp.success && resp.data) {
         setData(resp.data);
         if (isManual) {

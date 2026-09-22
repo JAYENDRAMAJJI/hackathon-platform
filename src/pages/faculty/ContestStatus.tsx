@@ -52,8 +52,12 @@ export default function ContestStatus() {
   const fetchContest = async (isManual = false) => {
     try {
       setRefreshing(true);
+      const minDelay = isManual ? new Promise((r) => setTimeout(r, 600)) : Promise.resolve();
       const query = selectedContestId ? `?contestId=${selectedContestId}` : '';
-      const resp = await apiClient.get(`/faculty/contest-status${query}`);
+      const [resp] = await Promise.all([
+        apiClient.get(`/faculty/contest-status${query}`),
+        minDelay,
+      ]);
       if (resp.success && resp.data) {
         setContest(resp.data.contest);
       }

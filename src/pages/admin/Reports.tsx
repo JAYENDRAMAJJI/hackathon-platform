@@ -124,7 +124,10 @@ export default function Reports() {
   const handleTriggerGenerate = async () => {
     setGenerating(true);
     try {
-      await fetchReport();
+      await Promise.all([
+        fetchReport(),
+        new Promise((r) => setTimeout(r, 600)),
+      ]);
       toast.success(`${reportTitle} compiled successfully with ${reportData.length} records`, 'Report Generated');
     } finally {
       setGenerating(false);

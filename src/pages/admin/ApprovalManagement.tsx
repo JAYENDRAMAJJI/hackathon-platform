@@ -35,15 +35,22 @@ export default function ApprovalManagement() {
 
   const toast = useToast();
 
-  const fetchPendingApprovals = async () => {
+  const fetchPendingApprovals = async (isManual = false) => {
     setLoading(true);
     try {
+      const minDelay = isManual ? new Promise((r) => setTimeout(r, 600)) : Promise.resolve();
       const params: any = { status: 'PENDING' };
       if (search.trim()) params.search = search.trim();
       if (roleFilter !== 'ALL') params.role = roleFilter;
-      const resp = await apiClient.get('/admin/users', params);
+      const [resp] = await Promise.all([
+        apiClient.get('/admin/users', params),
+        minDelay,
+      ]);
       if (resp.success && resp.data) {
         setPendingUsers(resp.data);
+      }
+      if (isManual) {
+        toast.success('Pending approvals queue refreshed');
       }
     } catch (err: any) {
       toast.error(err.message || 'Failed to fetch pending approvals');
@@ -154,8 +161,10 @@ export default function ApprovalManagement() {
 
         <div className="flex items-center gap-3">
           <button
-            onClick={fetchPendingApprovals}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all shadow-sm"
+            onClick={() => fetchPendingApprovals(true)}
+            disabled={loading}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all shadow-sm disabled:opacity-50 cursor-pointer"
+            title="Refresh Approval Queue"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-blue-400' : ''}`} />
             Refresh Queue ({pendingUsers.length})

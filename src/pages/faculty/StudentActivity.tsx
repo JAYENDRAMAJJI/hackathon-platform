@@ -59,6 +59,7 @@ export default function StudentActivity() {
   const fetchActivities = async (isManual = false) => {
     try {
       setRefreshing(true);
+      const minDelay = isManual ? new Promise((r) => setTimeout(r, 600)) : Promise.resolve();
       const params: Record<string, any> = {};
       if (selectedStudentId) params.studentId = selectedStudentId;
       if (activityTypeFilter) params.activityType = activityTypeFilter;
@@ -68,7 +69,10 @@ export default function StudentActivity() {
         ? `/faculty/students/${selectedStudentId}/activity`
         : `/faculty/activity`;
 
-      const resp = await apiClient.get(endpoint, params);
+      const [resp] = await Promise.all([
+        apiClient.get(endpoint, params),
+        minDelay,
+      ]);
       if (resp.success && resp.data) {
         setActivities(resp.data);
         if (isManual) {

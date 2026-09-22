@@ -307,10 +307,14 @@ export default function EditContest() {
                   </label>
                   <button
                     type="button"
-                    onClick={() => setFormData({ ...formData, code: generateRandomCode() })}
-                    className="text-[11px] text-blue-400 hover:text-blue-300 font-semibold flex items-center gap-1"
+                    onClick={() => {
+                      const newCode = generateRandomCode();
+                      setFormData({ ...formData, code: newCode });
+                      toast.info(`Regenerated contest access code: ${newCode}`);
+                    }}
+                    className="text-[11px] text-blue-400 hover:text-blue-300 font-semibold flex items-center gap-1 cursor-pointer transition-colors active:scale-95"
                   >
-                    <RefreshCw className="w-3 h-3" /> Auto
+                    <RefreshCw className="w-3 h-3 hover:rotate-180 transition-transform duration-300" /> Auto
                   </button>
                 </div>
                 <input

@@ -49,12 +49,16 @@ export default function FacultyAnomalies() {
   const fetchAnomalies = async (isManual = false) => {
     try {
       setRefreshing(true);
+      const minDelay = isManual ? new Promise((r) => setTimeout(r, 600)) : Promise.resolve();
       const params: Record<string, any> = {};
       if (statusFilter) params.status = statusFilter;
       if (severityFilter) params.severity = severityFilter;
       if (search) params.search = search;
 
-      const resp = await apiClient.get('/faculty/anomalies', params);
+      const [resp] = await Promise.all([
+        apiClient.get('/faculty/anomalies', params),
+        minDelay,
+      ]);
       if (resp.success && resp.data) {
         setAnomalies(resp.data);
       }

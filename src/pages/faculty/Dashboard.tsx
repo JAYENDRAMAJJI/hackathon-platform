@@ -66,6 +66,7 @@ export default function FacultyDashboard() {
   const loadDashboardData = async (isManual = false) => {
     try {
       setRefreshing(true);
+      const minDelay = isManual ? new Promise((r) => setTimeout(r, 600)) : Promise.resolve();
       const query = selectedContestId ? `?contestId=${selectedContestId}` : '';
       const [kpiRes, contestRes, activityRes, alertRes, perfRes, diffRes] = await Promise.all([
         apiClient.get(`/faculty/dashboard-kpis${query}`),
@@ -74,6 +75,7 @@ export default function FacultyDashboard() {
         apiClient.get(`/faculty/alerts${query}`),
         apiClient.get(`/faculty/analytics/performance${query}`),
         apiClient.get(`/faculty/analytics/difficulty${query}`),
+        minDelay,
       ]);
 
       if (kpiRes.success && kpiRes.data) setKpis(kpiRes.data);

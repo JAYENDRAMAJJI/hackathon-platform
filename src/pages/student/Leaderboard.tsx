@@ -19,6 +19,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useNavigate } from 'react-router-dom';
 import LeaderboardFilter from '../../components/LeaderboardFilter';
 import { LeaderboardFilterMeta } from '../../types/admin';
+import { useToast } from '../../context/AdminToastContext';
 
 export interface StudentLeaderboardEntry {
   rank: number;
@@ -45,11 +46,16 @@ export default function StudentLeaderboard() {
   const [filterMeta, setFilterMeta] = useState<LeaderboardFilterMeta | null>(null);
   const { user } = useAuthStore();
   const navigate = useNavigate();
+  const toast = useToast();
 
-  const fetchLeaderboard = async (currentKey = filterKey) => {
+  const fetchLeaderboard = async (currentKey = filterKey, isManual = false) => {
     try {
       setRefreshing(true);
-      const resp = await apiClient.get('/student/leaderboard', { filterKey: currentKey, contextId: currentKey });
+      const minDelay = isManual ? new Promise((r) => setTimeout(r, 600)) : Promise.resolve();
+      const [resp] = await Promise.all([
+        apiClient.get('/student/leaderboard', { filterKey: currentKey, contextId: currentKey }),
+        minDelay,
+      ]);
       if (resp.success && resp.data) {
         setStandings(resp.data);
       }
@@ -58,8 +64,14 @@ export default function StudentLeaderboard() {
       } else if (resp.contexts) {
         setFilterMeta({ contexts: resp.contexts });
       }
+      if (isManual) {
+        toast.success('Live contest leaderboard standings refreshed');
+      }
     } catch (err) {
       console.error('Failed to load student leaderboard:', err);
+      if (isManual) {
+        toast.error('Failed to load leaderboard data');
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -118,9 +130,10 @@ export default function StudentLeaderboard() {
 
         <div className="flex items-center gap-3">
           <button
-            onClick={() => fetchLeaderboard(filterKey)}
+            onClick={() => fetchLeaderboard(filterKey, true)}
             disabled={refreshing}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-all border border-slate-700 shadow-sm cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-all border border-slate-700 shadow-sm cursor-pointer disabled:opacity-50"
+            title="Refresh Leaderboard"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-blue-400' : 'text-slate-400'}`} />
             <span>{refreshing ? 'Refreshing...' : 'Refresh Standings'}</span>

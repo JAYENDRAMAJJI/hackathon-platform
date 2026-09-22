@@ -38,12 +38,19 @@ export default function DifficultyManagement() {
 
   const toast = useToast();
 
-  const fetchStats = async () => {
+  const fetchStats = async (isManual = false) => {
     setLoading(true);
     try {
-      const resp = await apiClient.get('/admin/questions/difficulty-stats');
+      const minDelay = isManual ? new Promise((r) => setTimeout(r, 600)) : Promise.resolve();
+      const [resp] = await Promise.all([
+        apiClient.get('/admin/questions/difficulty-stats'),
+        minDelay,
+      ]);
       if (resp.success && resp.data) {
         setLevels(resp.data);
+      }
+      if (isManual) {
+        toast.success('Difficulty matrix telemetry calibrated');
       }
     } catch (err: any) {
       toast.error('Failed to fetch difficulty calibration data');
@@ -83,8 +90,10 @@ export default function DifficultyManagement() {
             <Code2 className="w-4 h-4 text-emerald-400" /> Question Manager
           </Link>
           <button
-            onClick={fetchStats}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all shadow-sm"
+            onClick={() => fetchStats(true)}
+            disabled={loading}
+            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all shadow-sm disabled:opacity-50 cursor-pointer"
+            title="Refresh Difficulty Calibration Matrix"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-blue-400' : ''}`} />
           </button>

@@ -40,17 +40,24 @@ export default function AnomalyDetection() {
 
   const toast = useToast();
 
-  const fetchAnomalies = async () => {
+  const fetchAnomalies = async (isManual = false) => {
     setLoading(true);
     try {
+      const minDelay = isManual ? new Promise((r) => setTimeout(r, 600)) : Promise.resolve();
       const params: Record<string, string> = {};
       if (search.trim()) params.search = search.trim();
       if (severityFilter !== 'ALL') params.severity = severityFilter;
       if (statusFilter !== 'ALL') params.status = statusFilter;
 
-      const resp = await apiClient.get('/admin/anomalies', params);
+      const [resp] = await Promise.all([
+        apiClient.get('/admin/anomalies', params),
+        minDelay,
+      ]);
       if (resp.success && resp.data) {
         setAnomalies(resp.data);
+      }
+      if (isManual) {
+        toast.success('Anomaly telemetry stream refreshed');
       }
     } catch (err: any) {
       toast.error('Failed to load anomaly alerts');
@@ -111,8 +118,10 @@ export default function AnomalyDetection() {
 
         <div className="flex items-center gap-3">
           <button
-            onClick={fetchAnomalies}
-            className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all shadow-sm"
+            onClick={() => fetchAnomalies(true)}
+            disabled={loading}
+            className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all shadow-sm disabled:opacity-50 cursor-pointer"
+            title="Refresh Anomalies Stream"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-rose-400' : ''}`} />
           </button>

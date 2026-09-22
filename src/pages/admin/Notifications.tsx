@@ -26,12 +26,19 @@ export default function Notifications() {
 
   const toast = useToast();
 
-  const fetchNotifications = async () => {
+  const fetchNotifications = async (isManual = false) => {
     setLoading(true);
     try {
-      const resp = await apiClient.get('/admin/notifications');
+      const minDelay = isManual ? new Promise((r) => setTimeout(r, 600)) : Promise.resolve();
+      const [resp] = await Promise.all([
+        apiClient.get('/admin/notifications'),
+        minDelay,
+      ]);
       if (resp.success && resp.data) {
         setNotifications(resp.data);
+      }
+      if (isManual) {
+        toast.success('System notifications refreshed');
       }
     } catch (err: any) {
       toast.error('Failed to load notifications');
@@ -107,8 +114,10 @@ export default function Notifications() {
             </button>
           )}
           <button
-            onClick={fetchNotifications}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all shadow-sm"
+            onClick={() => fetchNotifications(true)}
+            disabled={loading}
+            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all shadow-sm disabled:opacity-50 cursor-pointer"
+            title="Refresh Notifications"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-blue-400' : ''}`} />
           </button>

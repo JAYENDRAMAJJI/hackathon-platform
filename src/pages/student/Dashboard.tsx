@@ -48,12 +48,14 @@ export default function StudentDashboard() {
   const [targetContestForJoin, setTargetContestForJoin] = useState<any | null>(null);
   const [modalCode, setModalCode] = useState('');
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = async (isManual = false) => {
     try {
       setRefreshing(true);
+      const minDelay = isManual ? new Promise((r) => setTimeout(r, 600)) : Promise.resolve();
       const [dashResp, contestsResp] = await Promise.all([
         apiClient.get('/student/dashboard'),
         apiClient.get('/student/contests'),
+        minDelay,
       ]);
 
       if (dashResp.success && dashResp.data) {
@@ -62,8 +64,14 @@ export default function StudentDashboard() {
       if (contestsResp.success && contestsResp.data) {
         setAvailableContests(contestsResp.data);
       }
+      if (isManual) {
+        toast.success('Dashboard telemetry and contests updated');
+      }
     } catch (err) {
       console.error('Failed to load student dashboard:', err);
+      if (isManual) {
+        toast.error('Failed to refresh dashboard data');
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -164,9 +172,10 @@ export default function StudentDashboard() {
         {/* Action Controls on the Right */}
         <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-3 shrink-0 z-10 border-t sm:border-t-0 sm:border-l border-slate-800 pt-4 sm:pt-0 sm:pl-6">
           <button
-            onClick={fetchDashboardData}
+            onClick={() => fetchDashboardData(true)}
             disabled={refreshing}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-all border border-slate-700 shadow-sm cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-all border border-slate-700 shadow-sm cursor-pointer disabled:opacity-50"
+            title="Refresh Telemetry"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-blue-400' : 'text-slate-400'}`} />
             <span>{refreshing ? 'Refreshing...' : 'Refresh Telemetry'}</span>
@@ -230,9 +239,10 @@ export default function StudentDashboard() {
             </h2>
           </div>
           <button
-            onClick={fetchDashboardData}
+            onClick={() => fetchDashboardData(true)}
             disabled={refreshing}
-            className="text-xs text-slate-400 hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer"
+            className="text-xs text-slate-400 hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+            title="Refresh Directory"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-blue-400' : ''}`} />
             Refresh Directory

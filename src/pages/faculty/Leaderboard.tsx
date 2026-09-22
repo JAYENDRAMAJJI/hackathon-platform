@@ -50,7 +50,11 @@ export default function FacultyLeaderboard() {
   const fetchLeaderboard = async (isManual = false, currentKey = filterKey) => {
     try {
       setRefreshing(true);
-      const resp = await apiClient.get('/faculty/leaderboard', { filterKey: currentKey, contextId: currentKey });
+      const minDelay = isManual ? new Promise((r) => setTimeout(r, 600)) : Promise.resolve();
+      const [resp] = await Promise.all([
+        apiClient.get('/faculty/leaderboard', { filterKey: currentKey, contextId: currentKey }),
+        minDelay,
+      ]);
       if (resp.success && resp.data) {
         setStandings(resp.data);
       }
@@ -60,7 +64,7 @@ export default function FacultyLeaderboard() {
         setFilterMeta({ contexts: resp.contexts });
       }
       if (isManual) {
-        toast.success('Leaderboard refreshed');
+        toast.success('Live arena leaderboard refreshed');
       }
     } catch (err) {
       console.error('Failed to load leaderboard:', err);

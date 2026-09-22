@@ -85,12 +85,19 @@ export default function ContestQuestionsManager() {
   });
 
   // Fetch Contest & Assigned Questions
-  const loadData = async () => {
+  const loadData = async (isManual = false) => {
     if (!contestId) return;
     setLoading(true);
     try {
+      const minDelay = isManual ? new Promise((r) => setTimeout(r, 600)) : Promise.resolve();
       // 1. Fetch contest questions
-      const qResp = await apiClient.get(`/admin/contests/${contestId}/questions`);
+      const [qResp, cResp, bankResp] = await Promise.all([
+        apiClient.get(`/admin/contests/${contestId}/questions`),
+        apiClient.get(`/admin/contests/${contestId}`),
+        apiClient.get('/admin/questions'),
+        minDelay,
+      ]);
+
       if (qResp.success && qResp.data) {
         setContestQuestions(qResp.data);
         if (qResp.contest) {
@@ -98,16 +105,16 @@ export default function ContestQuestionsManager() {
         }
       }
 
-      // 2. Fetch full contest info if needed
-      const cResp = await apiClient.get(`/admin/contests/${contestId}`);
       if (cResp.success && cResp.data) {
         setContest(cResp.data);
       }
 
-      // 3. Fetch all questions from repository for the picker
-      const bankResp = await apiClient.get('/admin/questions');
       if (bankResp.success && bankResp.data) {
         setBankQuestions(bankResp.data);
+      }
+
+      if (isManual) {
+        toast.success('Contest questions roster refreshed');
       }
     } catch (err: any) {
       toast.error(err.message || 'Failed to load contest questions');
@@ -360,8 +367,9 @@ export default function ContestQuestionsManager() {
           </Link>
 
           <button
-            onClick={loadData}
-            className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all shadow-sm"
+            onClick={() => loadData(true)}
+            disabled={loading}
+            className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all shadow-sm disabled:opacity-50 cursor-pointer"
             title="Refresh Questions"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-blue-400' : ''}`} />

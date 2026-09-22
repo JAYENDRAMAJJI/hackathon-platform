@@ -41,12 +41,16 @@ export default function FacultySubmissions() {
   const fetchSubmissions = async (isManual = false) => {
     try {
       setRefreshing(true);
+      const minDelay = isManual ? new Promise((r) => setTimeout(r, 600)) : Promise.resolve();
       const params: Record<string, any> = {};
       if (search) params.search = search;
       if (verdictFilter) params.verdict = verdictFilter;
       if (urlStudentId) params.studentId = urlStudentId;
 
-      const resp = await apiClient.get('/faculty/submissions', params);
+      const [resp] = await Promise.all([
+        apiClient.get('/faculty/submissions', params),
+        minDelay,
+      ]);
       if (resp.success && resp.data) {
         setSubmissions(resp.data);
       }

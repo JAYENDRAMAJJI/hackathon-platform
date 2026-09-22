@@ -57,7 +57,11 @@ export default function StudentPerformance() {
     if (!selectedStudentId) return;
     try {
       setRefreshing(true);
-      const resp = await apiClient.get(`/faculty/students/${selectedStudentId}/performance`);
+      const minDelay = isManual ? new Promise((r) => setTimeout(r, 600)) : Promise.resolve();
+      const [resp] = await Promise.all([
+        apiClient.get(`/faculty/students/${selectedStudentId}/performance`),
+        minDelay,
+      ]);
       if (resp.success && resp.data) {
         if (resp.data.metrics && resp.data.charts) {
           setMetrics(resp.data.metrics);

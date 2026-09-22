@@ -40,9 +40,10 @@ export default function Submissions() {
 
   const toast = useToast();
 
-  const fetchSubmissions = async () => {
+  const fetchSubmissions = async (isManual = false) => {
     setLoading(true);
     try {
+      const minDelay = isManual ? new Promise((r) => setTimeout(r, 600)) : Promise.resolve();
       const params: Record<string, string | number> = {};
       if (search) params.search = search;
       if (resultFilter !== 'ALL') params.result = resultFilter;
@@ -54,9 +55,15 @@ export default function Submissions() {
       if (contextFilter !== 'ALL') newUrlParams.set('contextId', contextFilter);
       setSearchParams(newUrlParams, { replace: true });
 
-      const resp = await apiClient.get('/admin/submissions', params);
+      const [resp] = await Promise.all([
+        apiClient.get('/admin/submissions', params),
+        minDelay,
+      ]);
       if (resp.success && resp.data) {
         setSubmissions(resp.data);
+      }
+      if (isManual) {
+        toast.success('Kotlin submissions stream refreshed');
       }
     } catch (err: any) {
       toast.error('Failed to load submissions');
@@ -125,8 +132,10 @@ export default function Submissions() {
             <Download className="w-4 h-4 text-blue-400" /> Export CSV
           </button>
           <button
-            onClick={fetchSubmissions}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all shadow-sm"
+            onClick={() => fetchSubmissions(true)}
+            disabled={loading}
+            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all shadow-sm disabled:opacity-50 cursor-pointer"
+            title="Refresh Submissions"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-blue-400' : ''}`} />
           </button>

@@ -47,7 +47,11 @@ export default function DifficultyAnalytics() {
   const fetchMatrix = async (isManual = false) => {
     try {
       setRefreshing(true);
-      const resp = await apiClient.get('/faculty/analytics/difficulty');
+      const minDelay = isManual ? new Promise((r) => setTimeout(r, 600)) : Promise.resolve();
+      const [resp] = await Promise.all([
+        apiClient.get('/faculty/analytics/difficulty'),
+        minDelay,
+      ]);
       if (resp.success && resp.data) {
         setMatrix(resp.data);
       }

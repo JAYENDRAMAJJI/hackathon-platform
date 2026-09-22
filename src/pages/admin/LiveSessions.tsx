@@ -45,9 +45,10 @@ export default function LiveSessions() {
   const toast = useToast();
   const navigate = useNavigate();
 
-  const fetchSessions = async () => {
+  const fetchSessions = async (isManual = false) => {
     setLoading(true);
     try {
+      const minDelay = isManual ? new Promise((r) => setTimeout(r, 600)) : Promise.resolve();
       const params: Record<string, string | boolean> = {};
       if (search) params.search = search;
       if (statusFilter !== 'ALL') params.status = statusFilter;
@@ -59,9 +60,15 @@ export default function LiveSessions() {
       if (contextFilter !== 'ALL') newUrlParams.set('contextId', contextFilter);
       setSearchParams(newUrlParams, { replace: true });
 
-      const resp = await apiClient.get('/admin/sessions', params);
+      const [resp] = await Promise.all([
+        apiClient.get('/admin/sessions', params),
+        minDelay,
+      ]);
       if (resp.success && resp.data) {
         setSessions(resp.data);
+      }
+      if (isManual) {
+        toast.success('Live participant sessions refreshed');
       }
     } catch (err: any) {
       toast.error('Failed to load active sessions');
@@ -190,8 +197,9 @@ export default function LiveSessions() {
             <Download className="w-4 h-4 text-blue-400" /> Export CSV
           </button>
           <button
-            onClick={fetchSessions}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all shadow-sm"
+            onClick={() => fetchSessions(true)}
+            disabled={loading}
+            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all shadow-sm disabled:opacity-50 cursor-pointer"
             title="Refresh Live Sessions"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-emerald-400' : ''}`} />

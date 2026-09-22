@@ -42,11 +42,18 @@ export default function AdminDashboard() {
     else setRefreshing(true);
 
     try {
-      const resp = await apiClient.get('/admin/dashboard');
+      const minDelay = silent ? new Promise((r) => setTimeout(r, 600)) : Promise.resolve();
+      const [resp] = await Promise.all([
+        apiClient.get('/admin/dashboard'),
+        minDelay,
+      ]);
       if (resp.success && resp.data) {
         setKpis(resp.data);
         if (resp.data.contest.timeRemainingSeconds) {
           setContestTimer(resp.data.contest.timeRemainingSeconds);
+        }
+        if (silent) {
+          toast.success('Command center telemetry refreshed');
         }
       }
     } catch (err: any) {

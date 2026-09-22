@@ -62,15 +62,23 @@ export default function AuditLogs() {
 
   const toast = useToast();
 
-  const fetchAuditLogs = async () => {
+  const fetchAuditLogs = async (isManual = false) => {
+    setLoading(true);
     try {
+      const minDelay = isManual ? new Promise((r) => setTimeout(r, 600)) : Promise.resolve();
       const params: Record<string, string> = {};
       if (search) params.search = search;
       if (actionFilter !== 'ALL') params.action = actionFilter;
 
-      const resp = await apiClient.get('/admin/audit-logs', params);
+      const [resp] = await Promise.all([
+        apiClient.get('/admin/audit-logs', params),
+        minDelay,
+      ]);
       if (resp && resp.data && Array.isArray(resp.data)) {
         setLogs(resp.data);
+      }
+      if (isManual) {
+        toast.success('Immutable audit logs refreshed');
       }
     } catch (err: any) {
       console.warn('Using default audit logs telemetry:', err);
@@ -136,8 +144,10 @@ export default function AuditLogs() {
             <Download className="w-4 h-4 text-blue-400" /> Export Audit CSV
           </button>
           <button
-            onClick={fetchAuditLogs}
-            className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all shadow-sm"
+            onClick={() => fetchAuditLogs(true)}
+            disabled={loading}
+            className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all shadow-sm disabled:opacity-50 cursor-pointer"
+            title="Refresh Audit Logs"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-emerald-400' : ''}`} />
           </button>

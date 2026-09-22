@@ -26,16 +26,23 @@ export default function ActivityMonitoring() {
 
   const toast = useToast();
 
-  const fetchActivity = async () => {
+  const fetchActivity = async (isManual = false) => {
     setLoading(true);
     try {
+      const minDelay = isManual ? new Promise((r) => setTimeout(r, 600)) : Promise.resolve();
       const params: Record<string, string> = {};
       if (search) params.search = search;
       if (actionFilter !== 'ALL') params.action = actionFilter;
 
-      const resp = await apiClient.get('/admin/activity', params);
+      const [resp] = await Promise.all([
+        apiClient.get('/admin/activity', params),
+        minDelay,
+      ]);
       if (resp.success && resp.data) {
         setLogs(resp.data);
+      }
+      if (isManual) {
+        toast.success('Participant activity stream refreshed');
       }
     } catch (err: any) {
       toast.error('Failed to load activity stream');
@@ -94,8 +101,10 @@ export default function ActivityMonitoring() {
             <Download className="w-4 h-4 text-blue-400" /> Export CSV
           </button>
           <button
-            onClick={fetchActivity}
-            className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all shadow-sm"
+            onClick={() => fetchActivity(true)}
+            disabled={loading}
+            className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all shadow-sm disabled:opacity-50 cursor-pointer"
+            title="Refresh Activity Stream"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-cyan-400' : ''}`} />
           </button>

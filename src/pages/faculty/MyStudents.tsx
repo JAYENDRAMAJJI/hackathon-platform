@@ -49,6 +49,7 @@ export default function MyStudents() {
   const fetchStudents = async (isManual = false) => {
     try {
       setRefreshing(true);
+      const minDelay = isManual ? new Promise((r) => setTimeout(r, 600)) : Promise.resolve();
       const params: Record<string, any> = {
         sortBy,
         sortOrder,
@@ -59,7 +60,10 @@ export default function MyStudents() {
       if (difficultyFilter) params.difficulty = difficultyFilter;
       if (departmentFilter) params.department = departmentFilter;
 
-      const resp = await apiClient.get('/faculty/students', params);
+      const [resp] = await Promise.all([
+        apiClient.get('/faculty/students', params),
+        minDelay,
+      ]);
       if (resp.success && resp.data) {
         setStudents(resp.data);
       }

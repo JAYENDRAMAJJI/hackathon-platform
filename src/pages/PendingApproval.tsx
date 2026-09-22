@@ -37,7 +37,10 @@ export default function PendingApproval() {
       if (studentId) params.studentId = studentId;
       if (email) params.email = email;
 
-      const resp = await apiClient.get('/auth/check-approval', params);
+      const [resp] = await Promise.all([
+        apiClient.get('/auth/check-approval', params),
+        new Promise((r) => setTimeout(r, 600)),
+      ]);
       if (resp.success && resp.data) {
         const student = resp.data;
         setStatus(student.status);

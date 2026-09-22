@@ -48,11 +48,15 @@ export default function LiveSessions() {
   const fetchSessions = async (isManual = false) => {
     try {
       setRefreshing(true);
+      const minDelay = isManual ? new Promise((r) => setTimeout(r, 600)) : Promise.resolve();
       const params: Record<string, any> = {};
       if (search) params.search = search;
       if (statusFilter) params.status = statusFilter;
 
-      const resp = await apiClient.get('/faculty/live-sessions', params);
+      const [resp] = await Promise.all([
+        apiClient.get('/faculty/live-sessions', params),
+        minDelay,
+      ]);
       if (resp.success && resp.data) {
         setSessions(resp.data);
       }

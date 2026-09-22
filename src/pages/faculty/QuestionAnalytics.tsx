@@ -42,7 +42,11 @@ export default function QuestionAnalytics() {
   const fetchQuestionAnalytics = async (isManual = false) => {
     try {
       setRefreshing(true);
-      const resp = await apiClient.get('/faculty/analytics/questions');
+      const minDelay = isManual ? new Promise((r) => setTimeout(r, 600)) : Promise.resolve();
+      const [resp] = await Promise.all([
+        apiClient.get('/faculty/analytics/questions'),
+        minDelay,
+      ]);
       if (resp.success && resp.data) {
         setQuestions(resp.data);
         if (isManual) {

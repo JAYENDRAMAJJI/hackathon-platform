@@ -37,10 +37,14 @@ export default function Leaderboard() {
 
   const toast = useToast();
 
-  const fetchLeaderboard = async (currentKey = filterKey) => {
+  const fetchLeaderboard = async (currentKey = filterKey, isManual = false) => {
     setLoading(true);
     try {
-      const resp = await apiClient.get('/admin/leaderboard', { filterKey: currentKey, contextId: currentKey });
+      const minDelay = isManual ? new Promise((r) => setTimeout(r, 600)) : Promise.resolve();
+      const [resp] = await Promise.all([
+        apiClient.get('/admin/leaderboard', { filterKey: currentKey, contextId: currentKey }),
+        minDelay,
+      ]);
       if (resp.success && resp.data) {
         setEntries(resp.data);
       }
@@ -48,6 +52,9 @@ export default function Leaderboard() {
         setFilterMeta(resp.filterMeta);
       } else if (resp.contexts) {
         setFilterMeta({ contexts: resp.contexts });
+      }
+      if (isManual) {
+        toast.success('Live arena leaderboard refreshed');
       }
     } catch (err: any) {
       toast.error('Failed to load leaderboard standings');
@@ -193,8 +200,9 @@ export default function Leaderboard() {
             <Printer className="w-4 h-4 text-slate-400" /> Print
           </button>
           <button
-            onClick={() => fetchLeaderboard(filterKey)}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all shadow-sm"
+            onClick={() => fetchLeaderboard(filterKey, true)}
+            disabled={loading}
+            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all shadow-sm disabled:opacity-50 cursor-pointer"
             title="Refresh Leaderboard"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-amber-400' : ''}`} />

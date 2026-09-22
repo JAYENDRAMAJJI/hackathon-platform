@@ -40,12 +40,16 @@ export default function ActivityMonitor() {
   const fetchActivities = async (isManual = false) => {
     try {
       setRefreshing(true);
+      const minDelay = isManual ? new Promise((r) => setTimeout(r, 600)) : Promise.resolve();
       const params: Record<string, any> = {};
       if (search) params.search = search;
       if (activityFilter) params.activity = activityFilter;
       if (difficultyFilter) params.difficulty = difficultyFilter;
 
-      const resp = await apiClient.get('/faculty/activity', params);
+      const [resp] = await Promise.all([
+        apiClient.get('/faculty/activity', params),
+        minDelay,
+      ]);
       if (resp.success && resp.data) {
         setActivities(resp.data);
         if (isManual) {
