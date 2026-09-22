@@ -1,0 +1,6 @@
+{
+  "name": "Hackathon Coding Platform",
+  "description": "A comprehensive hackathon coding competition platform with live leaderboards, Kotlin sandbox execution, and faculty monitoring.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
