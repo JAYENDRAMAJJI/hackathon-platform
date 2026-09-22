@@ -261,8 +261,12 @@ export default function Login() {
               <span>Competitive Algorithmic Arena</span>
             </div>
 
-            <h1 className="text-4xl font-black tracking-tight leading-tight text-white">
-              {BRAND_CONFIG.tagline}
+            <h1 className="text-3xl sm:text-4xl font-black tracking-tight leading-tight flex flex-wrap items-center gap-x-2.5 gap-y-1">
+              <span className="text-white">CODE.</span>
+              <span className="text-blue-400">SOLVE.</span>
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-blue-400 to-cyan-400">
+                COMPETE.
+              </span>
             </h1>
 
             <p className="text-sm text-slate-300 leading-relaxed font-normal">

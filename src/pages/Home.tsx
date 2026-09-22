@@ -168,9 +168,10 @@ export default function Home() {
                 <span>Synchronized University Coding Competition</span>
               </div>
 
-              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-slate-900 dark:text-white tracking-tight leading-[1.1]">
-                CODE. SOLVE.{' '}
-                <span className="text-transparent bg-clip-text bg-linear-to-r from-indigo-600 via-blue-600 to-cyan-500">
+              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight leading-tight flex flex-wrap items-center justify-center lg:justify-start gap-x-3 gap-y-1">
+                <span className="text-slate-900 dark:text-white">CODE.</span>
+                <span className="text-blue-600 dark:text-blue-400">SOLVE.</span>
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 via-blue-500 to-cyan-400">
                   COMPETE.
                 </span>
               </h1>
