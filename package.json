@@ -4,7 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx server.ts",
+    "dev": "node scripts/clean-ports.js && tsx server.ts",
+    "clean:ports": "node scripts/clean-ports.js",
     "dev:vite": "vite --port=3001 --host=0.0.0.0",
     "server": "tsx server.ts",
     "server:watch": "tsx watch server.ts",

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import {
   Code,
@@ -57,6 +57,19 @@ export default function Login() {
   const [sessionNotice, setSessionNotice] = useState<string | null>(
     isJustRegistered ? 'Account registered successfully! Please sign in below.' : null
   );
+
+  // If already authenticated with valid session, navigate directly to role-specific dashboard
+  useEffect(() => {
+    if (isAuthenticated && currentUser) {
+      if (currentUser.role === 'STUDENT') {
+        navigate('/student/dashboard', { replace: true });
+      } else if (currentUser.role === 'FACULTY') {
+        navigate('/faculty/dashboard', { replace: true });
+      } else if (currentUser.role === 'ADMIN') {
+        navigate('/admin/dashboard', { replace: true });
+      }
+    }
+  }, [isAuthenticated, currentUser, navigate]);
 
   // Password Requirements Checker
   const passwordCriteria = useMemo(() => {

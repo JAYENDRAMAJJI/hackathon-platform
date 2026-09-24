@@ -1,3 +1,4 @@
+import http from 'http';
 import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
@@ -213,6 +214,17 @@ const generateSeedContests = () => [
     difficultyRange: [1, 10],
     questionCount: 5,
     questionIds: ['q_1', 'q_2', 'q_3', 'q_4', 'q_5'],
+    questionMarks: { q_1: 20, q_2: 25, q_3: 35, q_4: 40, q_5: 45 },
+    instructions: [
+      'Carefully review all problems, constraints, and scoring rubrics before starting your contest timer.',
+      'Your authoritative contest countdown begins only when you confirm "Start Contest".',
+      'You can freely navigate between all assigned questions using the question selector panel in any order.',
+      'Use "Run Code" to test your implementation against visible test fixtures.',
+      'Use "Submit Solution" for automated grading against visible and confidential test suites.',
+      'All code is executed in an isolated secure sandbox (256MB RAM / 5.0s CPU limit).',
+      'Code drafts for each question are auto-saved in your browser and on the server.',
+      'Ensure you finish and submit your solutions before the authoritative contest timer expires.'
+    ],
     kotlinOnly: true,
     scoringConfig: {
       difficultyWeights: {
@@ -1106,6 +1118,10 @@ const generateSeedSessions = (users: any[], questions: any[]) => {
       anomalyType = 'RAPID_SUBMISSIONS';
     }
 
+    const isCurrentUser = stu.id === 'usr_stu_3';
+    const sessionStatus = isCurrentUser ? 'NOT_STARTED' : (stu.sessionStatus || 'ACTIVE');
+    const startedAt = isCurrentUser ? null : new Date(Date.now() - 3600000 + (idx * 30000)).toISOString();
+
     sessions.push({
       id: `sess_${stu.id}`,
       studentId: stu.id,
@@ -1115,12 +1131,16 @@ const generateSeedSessions = (users: any[], questions: any[]) => {
       currentQuestionId: q.id,
       currentQuestionTitle: q.title,
       currentDifficulty: stu.currentDifficulty || q.difficulty,
-      score: stu.score || 0,
-      solvedCount: stu.solvedCount || 0,
-      skippedCount: stu.skippedCount || 0,
-      attemptsCount: stu.attemptsCount || 0,
-      timeRemainingSeconds: Math.max(0, 7200 - ((idx * 67) % 5400)),
-      sessionStatus: stu.sessionStatus || 'ACTIVE',
+      score: isCurrentUser ? 0 : (stu.score || 0),
+      solvedCount: isCurrentUser ? 0 : (stu.solvedCount || 0),
+      skippedCount: isCurrentUser ? 0 : (stu.skippedCount || 0),
+      attemptsCount: isCurrentUser ? 0 : (stu.attemptsCount || 0),
+      durationMinutes: 120,
+      startedAt,
+      timeRemainingSeconds: isCurrentUser ? 7200 : Math.max(0, 7200 - ((idx * 67) % 5400)),
+      sessionStatus,
+      assignedQuestionIds: ['q_1', 'q_2', 'q_3', 'q_4', 'q_5'],
+      questionAnswers: {},
       lastActivity: new Date(Date.now() - (idx % 12) * 60000).toISOString(),
       anomalyStatus,
       anomalyType,
@@ -1604,17 +1624,12 @@ const resolveUserFromToken = (token: string): any => {
 const authenticateAuthUser = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const authHeader = req.headers['authorization'];
   if (!authHeader) {
-    const defaultUser = db.users[0];
-    if (defaultUser) {
-      (req as any).user = defaultUser;
-      return next();
-    }
     return res.status(401).json({ success: false, message: 'Authentication required. Please sign in.' });
   }
   const token = authHeader.replace('Bearer ', '').trim();
   const user = resolveUserFromToken(token);
   if (!user) {
-    return res.status(401).json({ success: false, message: 'Invalid or expired session token.' });
+    return res.status(401).json({ success: false, message: 'Invalid or expired session token. Please sign in again.' });
   }
   (req as any).user = user;
   next();
@@ -1624,16 +1639,14 @@ const authenticateAuthUser = (req: express.Request, res: express.Response, next:
 const authenticateAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const authHeader = req.headers['authorization'];
   if (!authHeader) {
-    const defaultAdmin = db.users.find((u) => u.role === 'ADMIN');
-    if (defaultAdmin) {
-      (req as any).user = defaultAdmin;
-      return next();
-    }
-    return res.status(401).json({ success: false, message: 'Admin authentication required.' });
+    return res.status(401).json({ success: false, message: 'Admin authentication required. Please sign in.' });
   }
   const token = authHeader.replace('Bearer ', '').trim();
   const user = resolveUserFromToken(token);
-  if (!user || user.role !== 'ADMIN') {
+  if (!user) {
+    return res.status(401).json({ success: false, message: 'Invalid or expired session token. Please sign in again.' });
+  }
+  if (user.role !== 'ADMIN') {
     return res.status(403).json({ success: false, message: 'Access Denied: Administrator authorization required.' });
   }
   (req as any).user = user;
@@ -1644,16 +1657,14 @@ const authenticateAdmin = (req: express.Request, res: express.Response, next: ex
 const authenticateFaculty = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const authHeader = req.headers['authorization'];
   if (!authHeader) {
-    const defaultFaculty = db.users.find((u) => u.role === 'FACULTY');
-    if (defaultFaculty) {
-      (req as any).user = defaultFaculty;
-      return next();
-    }
-    return res.status(401).json({ success: false, message: 'Faculty authentication required.' });
+    return res.status(401).json({ success: false, message: 'Faculty authentication required. Please sign in.' });
   }
   const token = authHeader.replace('Bearer ', '').trim();
   const user = resolveUserFromToken(token);
-  if (!user || (user.role !== 'FACULTY' && user.role !== 'ADMIN')) {
+  if (!user) {
+    return res.status(401).json({ success: false, message: 'Invalid or expired session token. Please sign in again.' });
+  }
+  if (user.role !== 'FACULTY' && user.role !== 'ADMIN') {
     return res.status(403).json({ success: false, message: 'Access Denied: Faculty supervisor authorization required.' });
   }
   (req as any).user = user;
@@ -1714,18 +1725,12 @@ const getFacultyTargetContest = (facultyUser: any, requestedContestId?: string) 
 const authenticateStudent = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const authHeader = req.headers['authorization'];
   if (!authHeader) {
-    // If running in development and no token provided, fallback to standard demo student usr_stu_3
-    const defaultStudent = db.users.find((u) => u.id === 'usr_stu_3') || db.users.find((u) => u.role === 'STUDENT' && u.approved);
-    if (defaultStudent) {
-      (req as any).user = defaultStudent;
-      return next();
-    }
-    return res.status(401).json({ success: false, message: 'Student authentication required.' });
+    return res.status(401).json({ success: false, message: 'Student authentication required. Please sign in.' });
   }
   const token = authHeader.replace('Bearer ', '').trim();
   const user = resolveUserFromToken(token);
   if (!user) {
-    return res.status(401).json({ success: false, message: 'Student account not found.' });
+    return res.status(401).json({ success: false, message: 'Invalid or expired session token. Please sign in again.' });
   }
   if (user.role !== 'STUDENT') {
     return res.status(403).json({ success: false, message: 'Access Denied: Student account required.' });
@@ -3010,6 +3015,42 @@ app.delete('/api/admin/contests/:id/questions/:questionId', authenticateAdmin, (
   res.json({ success: true, message: 'Question removed from contest successfully', contest });
 });
 
+// Admin reorder contest questions
+app.put('/api/admin/contests/:id/questions/order', authenticateAdmin, (req, res) => {
+  const admin = (req as any).user;
+  const contest = db.contests.find((c) => c.id === req.params.id);
+  if (!contest) return res.status(404).json({ success: false, message: 'Contest not found' });
+
+  const { questionIds } = req.body;
+  if (!Array.isArray(questionIds)) {
+    return res.status(400).json({ success: false, message: 'questionIds array required' });
+  }
+
+  contest.questionIds = questionIds;
+  contest.questionCount = questionIds.length;
+  logAudit(admin.id, admin.name, admin.role, 'CONTEST_QUESTIONS_REORDERED', `Reordered questions in contest ${contest.name}`);
+  res.json({ success: true, message: 'Question order updated successfully', contest });
+});
+
+// Admin update question marks/scoring weight in contest
+app.put('/api/admin/contests/:id/questions/:questionId/marks', authenticateAdmin, (req, res) => {
+  const admin = (req as any).user;
+  const contest = db.contests.find((c) => c.id === req.params.id);
+  if (!contest) return res.status(404).json({ success: false, message: 'Contest not found' });
+
+  const { marks } = req.body;
+  if (marks === undefined || isNaN(Number(marks))) {
+    return res.status(400).json({ success: false, message: 'Valid marks number required' });
+  }
+
+  if (!(contest as any).questionMarks) {
+    (contest as any).questionMarks = {};
+  }
+  (contest as any).questionMarks[req.params.questionId] = Number(marks);
+  logAudit(admin.id, admin.name, admin.role, 'CONTEST_QUESTION_MARKS_UPDATED', `Updated question marks to ${marks} for question ${req.params.questionId} in contest ${contest.name}`);
+  res.json({ success: true, message: 'Question marks updated successfully', questionMarks: (contest as any).questionMarks, contest });
+});
+
 app.post('/api/admin/contests/:id/start', authenticateAdmin, (req, res) => {
   const admin = (req as any).user;
   const contest = db.contests.find((c) => c.id === req.params.id);
@@ -3136,6 +3177,33 @@ app.get('/api/admin/questions', authenticateAuthUser, (req, res) => {
   res.json({ success: true, count: questions.length, data: questions });
 });
 
+// Difficulty Statistics & Calibration
+app.get('/api/admin/questions/difficulty-stats', authenticateAdmin, (req, res) => {
+  const levels = [];
+
+  for (let i = 1; i <= 10; i++) {
+    const qs = db.questions.filter((q) => q.difficulty === i);
+    const totalQuestions = qs.length;
+    const activeQuestions = qs.filter((q) => q.status === 'ACTIVE').length;
+    const avgSuccessRate = totalQuestions ? Math.round(qs.reduce((a, b) => a + b.successRate, 0) / totalQuestions) : 0;
+    const avgSolvingTime = totalQuestions ? Number((qs.reduce((a, b) => a + b.averageTimeMinutes, 0) / totalQuestions).toFixed(1)) : 0;
+    const avgSkipRate = totalQuestions ? Number((qs.reduce((a, b) => a + b.skipRate, 0) / totalQuestions).toFixed(1)) : 0;
+
+    levels.push({
+      level: i,
+      totalQuestions,
+      activeQuestions,
+      averageSuccessRate: avgSuccessRate,
+      averageSolvingTimeMinutes: avgSolvingTime,
+      skipRate: avgSkipRate,
+      failureRate: 100 - avgSuccessRate,
+      calibratedStatus: avgSuccessRate > 75 ? 'EASY_FOR_LEVEL' : avgSuccessRate < 25 ? 'HARD_FOR_LEVEL' : 'BALANCED',
+    });
+  }
+
+  res.json({ success: true, data: levels });
+});
+
 app.get('/api/admin/questions/:id', authenticateAdmin, (req, res) => {
   const question = db.questions.find((q) => q.id === req.params.id);
   if (!question) return res.status(404).json({ success: false, message: 'Question not found' });
@@ -3220,33 +3288,6 @@ app.post('/api/admin/questions/:id/change-difficulty', authenticateAdmin, (req, 
   logAudit(admin.id, admin.name, admin.role, 'DIFFICULTY_CHANGED', `Changed difficulty for '${question.title}' from Level ${oldDiff} to Level ${newDifficulty}. Reason: ${reason || 'Admin adjustment'}`);
 
   res.json({ success: true, message: `Difficulty changed to Level ${newDifficulty}`, data: question });
-});
-
-// Difficulty Statistics & Calibration
-app.get('/api/admin/questions/difficulty-stats', authenticateAdmin, (req, res) => {
-  const levels = [];
-
-  for (let i = 1; i <= 10; i++) {
-    const qs = db.questions.filter((q) => q.difficulty === i);
-    const totalQuestions = qs.length;
-    const activeQuestions = qs.filter((q) => q.status === 'ACTIVE').length;
-    const avgSuccessRate = totalQuestions ? Math.round(qs.reduce((a, b) => a + b.successRate, 0) / totalQuestions) : 0;
-    const avgSolvingTime = totalQuestions ? Number((qs.reduce((a, b) => a + b.averageTimeMinutes, 0) / totalQuestions).toFixed(1)) : 0;
-    const avgSkipRate = totalQuestions ? Number((qs.reduce((a, b) => a + b.skipRate, 0) / totalQuestions).toFixed(1)) : 0;
-
-    levels.push({
-      level: i,
-      totalQuestions,
-      activeQuestions,
-      averageSuccessRate: avgSuccessRate,
-      averageSolvingTimeMinutes: avgSolvingTime,
-      skipRate: avgSkipRate,
-      failureRate: 100 - avgSuccessRate,
-      calibratedStatus: avgSuccessRate > 75 ? 'EASY_FOR_LEVEL' : avgSuccessRate < 25 ? 'HARD_FOR_LEVEL' : 'BALANCED',
-    });
-  }
-
-  res.json({ success: true, data: levels });
 });
 
 // 8. Test Cases Management
@@ -5546,26 +5587,29 @@ app.get('/api/faculty/analytics/difficulty', authenticateFaculty, (req, res) => 
 });
 
 // Faculty Difficulty Adjustment Request (Supervisory action sends request to Admin)
-app.post('/api/faculty/analytics/difficulty/request-adjustment', authenticateFaculty, (req, res) => {
+app.post(['/api/faculty/analytics/difficulty/request-adjustment', '/api/faculty/analytics/difficulty-request'], authenticateFaculty, (req, res) => {
   const fac = (req as any).user;
-  const { level, proposedAction, reason } = req.body;
+  const { level, proposedAction, reason, currentPoints, proposedPoints } = req.body;
+  const justification = reason || req.body.requestReason;
 
-  if (!level || !reason) {
+  if (!level || !justification) {
     return res.status(400).json({ success: false, message: 'Difficulty level and justification reason are required.' });
   }
+
+  const actionText = proposedAction || (proposedPoints ? `Adjust points from ${currentPoints || 'default'} to ${proposedPoints} pts` : 'Calibrate weight');
 
   const logRecord = logAudit(
     fac.id,
     fac.name,
     fac.role,
     'REQUEST_DIFFICULTY_CHANGE',
-    `Faculty requested difficulty adjustment for Level ${level} (${proposedAction || 'Calibrate weight'}): ${reason}`
+    `Faculty requested difficulty adjustment for Level ${level} (${actionText}): ${justification}`
   );
 
   const notif = {
     id: `notif_${Date.now()}`,
     title: `Difficulty Adjustment Request (Level ${level})`,
-    message: `Supervisor ${fac.name} submitted a difficulty adjustment request for Level ${level}: "${reason}"`,
+    message: `Supervisor ${fac.name} submitted a difficulty adjustment request for Level ${level}: "${justification}"`,
     category: 'SYSTEM',
     severity: 'INFO',
     read: false,
@@ -6168,7 +6212,387 @@ app.get('/api/student/dashboard', authenticateStudent, (req, res) => {
   });
 });
 
-// 2. Student Contest Arena State (Loads active question matching current difficulty)
+// ==========================================
+// STUDENT QUESTION PAPER & CONTEST ARENA APIS
+// ==========================================
+
+const DEFAULT_CONTEST_INSTRUCTIONS = [
+  'Carefully review all problems, constraints, and scoring rubrics before starting your contest timer.',
+  'Your authoritative contest countdown begins only when you confirm "Start Contest".',
+  'You can freely navigate between all assigned questions using the question navigation panel in any order.',
+  'Write your solution within the designated class/function signature. Do not modify the signature names.',
+  'Use "Run Code" to test your implementation against visible test fixtures.',
+  'Use "Submit Solution" for official automated evaluation against confidential hidden edge and boundary test suites.',
+  'All code is executed in an isolated secure sandbox (256MB RAM / 5.0s CPU execution limit).',
+  'Code drafts for each question are auto-saved in your browser and synchronized to the server.',
+  'Ensure you submit your solutions or finish the contest before the authoritative contest timer expires.'
+];
+
+// Helper: Calculate question marks from custom marks or scoring weights
+const getQuestionMarks = (q: any, contest: any): number => {
+  if (contest?.questionMarks && contest.questionMarks[q.id] !== undefined) {
+    return Number(contest.questionMarks[q.id]);
+  }
+  const weights = contest?.scoringConfig?.difficultyWeights || {
+    1: 10, 2: 20, 3: 35, 4: 55, 5: 80,
+    6: 110, 7: 150, 8: 200, 9: 260, 10: 330
+  };
+  return weights[q.difficulty] || q.difficulty * 20;
+};
+
+// Helper: Calculate authoritative remaining time in seconds based on backend start time and contest end
+const calculateAuthoritativeRemainingSeconds = (session: any, contest: any): number => {
+  if (!session || !session.startedAt || session.sessionStatus === 'NOT_STARTED') {
+    return (contest?.durationMinutes || 120) * 60;
+  }
+  if (session.sessionStatus === 'COMPLETED' || session.sessionStatus === 'EXPIRED') {
+    return 0;
+  }
+  const startedMs = new Date(session.startedAt).getTime();
+  const durationMs = (session.durationMinutes || contest?.durationMinutes || 120) * 60 * 1000;
+  const studentDeadline = startedMs + durationMs;
+  const contestEndMs = contest?.endTime ? new Date(contest.endTime).getTime() : Infinity;
+  const effectiveDeadline = Math.min(studentDeadline, contestEndMs);
+  const now = Date.now();
+  const remaining = Math.max(0, Math.floor((effectiveDeadline - now) / 1000));
+  return remaining;
+};
+
+// Helper: Sanitize question for student view (STRICTLY NO HIDDEN TEST CASES OR SECRETS)
+const sanitizeQuestionForStudent = (q: any, index: number, contest: any, status: 'SOLVED' | 'ATTEMPTED' | 'UNANSWERED' = 'UNANSWERED', savedCode: string = '') => {
+  const marks = getQuestionMarks(q, contest);
+  const visibleTests = db.testCases
+    .filter((tc) => tc.questionId === q.id && !tc.isHidden && tc.isEnabled)
+    .map((tc, idx) => ({
+      id: tc.id,
+      input: tc.input || q.sampleInput,
+      expectedOutput: tc.expectedOutput || q.sampleOutput,
+      description: tc.description || `Sample Case ${idx + 1}`,
+    }));
+
+  const examples = [
+    {
+      input: q.sampleInput || q.expectedInput || 'Sample input',
+      output: q.sampleOutput || q.expectedOutput || 'Sample output',
+      explanation: q.explanation || 'Optimal evaluation matching problem constraints.',
+    },
+    ...(q.expectedInput && q.sampleInput !== q.expectedInput
+      ? [{
+          input: q.expectedInput,
+          output: q.expectedOutput || 'Expected output',
+          explanation: 'Secondary test case illustrating boundary conditions.',
+        }]
+      : []),
+  ];
+
+  return {
+    id: q.id,
+    questionNumber: index + 1,
+    title: q.title,
+    difficulty: q.difficulty,
+    category: q.category,
+    tags: q.tags || [],
+    marks,
+    score: marks,
+    problemStatement: q.problemStatement,
+    inputFormat: q.inputFormat || 'Lines formatted per function signature arguments',
+    outputFormat: q.outputFormat || 'Evaluated output matching expected return type',
+    constraints: q.constraints || 'Standard contest memory and CPU constraints apply.',
+    sampleInput: q.sampleInput || '',
+    sampleOutput: q.sampleOutput || '',
+    explanation: q.explanation || '',
+    examples,
+    visibleTestCases: visibleTests,
+    visibleTestCasesCount: q.visibleTestCasesCount || 2,
+    hiddenTestCasesCount: q.hiddenTestCasesCount || 4,
+    functionSignature: q.functionSignature,
+    starterCode: savedCode || q.starterCode,
+    status,
+  };
+};
+
+// 1. Question Paper Preview API
+app.get('/api/student/contest/paper', authenticateStudent, (req, res) => {
+  const student = (req as any).user;
+  const requestedContestId = req.query.contestId as string | undefined;
+
+  let contest = requestedContestId
+    ? db.contests.find((c) => c.id === requestedContestId)
+    : (db.contests.find((c) => c.status === 'ACTIVE' && Array.isArray(c.participantIds) && c.participantIds.includes(student.id)) ||
+       db.contests.find((c) => Array.isArray(c.participantIds) && c.participantIds.includes(student.id)) ||
+       db.contests.find((c) => c.status === 'ACTIVE') ||
+       db.contests[0]);
+
+  if (!contest) {
+    return res.status(404).json({ success: false, message: 'No contest found.' });
+  }
+
+  // Check enrollment
+  const isJoined = Array.isArray(contest.participantIds) && contest.participantIds.includes(student.id);
+  if (!isJoined) {
+    return res.status(403).json({
+      success: false,
+      code: 'CONTEST_NOT_JOINED',
+      message: `You must join "${contest.name}" using a valid Contest Code before reviewing the question paper.`,
+      data: {
+        contestId: contest.id,
+        contestName: contest.name,
+        status: contest.status,
+      },
+    });
+  }
+
+  // Find or check session
+  let session = db.sessions.find(
+    (s) => s.studentId === student.id && (s.contestId === contest.id || (!s.contestId && contest.id === 'contest_1'))
+  );
+
+  let sessionStatus: 'NOT_STARTED' | 'ACTIVE' | 'COMPLETED' | 'EXPIRED' = 'NOT_STARTED';
+  let isStarted = false;
+  let remainingSeconds = (contest.durationMinutes || 120) * 60;
+
+  if (session && session.startedAt && session.sessionStatus !== 'NOT_STARTED') {
+    remainingSeconds = calculateAuthoritativeRemainingSeconds(session, contest);
+    if (session.sessionStatus === 'COMPLETED') {
+      sessionStatus = 'COMPLETED';
+      isStarted = true;
+    } else if (remainingSeconds <= 0) {
+      session.sessionStatus = 'EXPIRED';
+      sessionStatus = 'EXPIRED';
+      isStarted = true;
+    } else if (session.sessionStatus === 'ACTIVE') {
+      sessionStatus = 'ACTIVE';
+      isStarted = true;
+    }
+  }
+
+  // If student has an active/completed session, use their frozen question set; otherwise use published contest questionIds
+  const questionIdsToUse = (session && session.startedAt && Array.isArray(session.assignedQuestionIds) && session.assignedQuestionIds.length > 0)
+    ? session.assignedQuestionIds
+    : (contest.questionIds || ['q_1', 'q_2', 'q_3', 'q_4', 'q_5']);
+
+  const questionsList = questionIdsToUse
+    .map((qId: string) => db.questions.find((q) => q.id === qId && q.status === 'ACTIVE'))
+    .filter(Boolean);
+
+  // If questions empty, fallback to available questions
+  const finalQuestions = questionsList.length > 0 ? questionsList : db.questions.slice(0, 5);
+
+  // Calculate total marks
+  const totalMarks = finalQuestions.reduce((sum: number, q: any) => sum + getQuestionMarks(q, contest), 0);
+
+  // Sanitize questions for student (strictly visible info only)
+  const sanitizedQuestions = finalQuestions.map((q: any, idx: number) => {
+    return sanitizeQuestionForStudent(q, idx, contest);
+  });
+
+  const instructions = Array.isArray((contest as any).instructions) && (contest as any).instructions.length > 0
+    ? (contest as any).instructions
+    : (typeof (contest as any).instructions === 'string' ? [(contest as any).instructions] : DEFAULT_CONTEST_INSTRUCTIONS);
+
+  res.json({
+    success: true,
+    data: {
+      contest: {
+        id: contest.id,
+        name: contest.name,
+        code: contest.code,
+        description: contest.description,
+        instructions,
+        rules: {
+          attemptRules: contest.attemptRules || 'Standard contest submission rules apply.',
+          skipRules: contest.skipRules || 'Problem skipping rules apply.',
+          attemptPenalty: contest.scoringConfig?.attemptPenalty || 2,
+          skipImpact: contest.scoringConfig?.skipImpact || 5,
+        },
+        durationMinutes: contest.durationMinutes || 120,
+        difficultyRange: contest.difficultyRange || [1, 10],
+        startTime: contest.startTime,
+        endTime: contest.endTime,
+        status: contest.status,
+        kotlinOnly: contest.kotlinOnly !== false,
+        isJoined: true,
+        participantsCount: Array.isArray(contest.participantIds) ? contest.participantIds.length : (contest.participantsCount || 0),
+      },
+      questions: sanitizedQuestions,
+      totalQuestions: sanitizedQuestions.length,
+      totalMarks,
+      sessionState: sessionStatus,
+      isStarted,
+      startedAt: session?.startedAt || null,
+      timeRemainingSeconds: remainingSeconds,
+      serverTime: new Date().toISOString(),
+    },
+  });
+});
+
+// 2. Start Contest Attempt API (Authoritatively initiates timer and freezes question pool)
+app.post('/api/student/contest/start', authenticateStudent, (req, res) => {
+  const student = (req as any).user;
+  const { contestId } = req.body;
+
+  let contest = contestId
+    ? db.contests.find((c) => c.id === contestId)
+    : (db.contests.find((c) => c.status === 'ACTIVE' && Array.isArray(c.participantIds) && c.participantIds.includes(student.id)) ||
+       db.contests.find((c) => Array.isArray(c.participantIds) && c.participantIds.includes(student.id)) ||
+       db.contests.find((c) => c.status === 'ACTIVE') ||
+       db.contests[0]);
+
+  if (!contest) {
+    return res.status(404).json({ success: false, message: 'Contest not found.' });
+  }
+
+  // Check enrollment
+  if (!Array.isArray(contest.participantIds) || !contest.participantIds.includes(student.id)) {
+    return res.status(403).json({
+      success: false,
+      code: 'CONTEST_NOT_JOINED',
+      message: `You must join "${contest.name}" using an Access Code before starting the contest.`,
+    });
+  }
+
+  // Check contest scheduling status
+  if (contest.status === 'ENDED' || contest.status === 'CANCELLED') {
+    return res.status(400).json({
+      success: false,
+      code: 'CONTEST_CLOSED',
+      message: `Cannot start contest: "${contest.name}" is already ${contest.status.toLowerCase()}.`,
+    });
+  }
+
+  if (contest.status === 'SCHEDULED' && contest.startTime) {
+    const scheduledStart = new Date(contest.startTime).getTime();
+    if (Date.now() < scheduledStart) {
+      return res.status(400).json({
+        success: false,
+        code: 'CONTEST_NOT_YET_OPEN',
+        message: `This contest has not started yet. Official start time: ${new Date(contest.startTime).toLocaleString()}.`,
+      });
+    }
+  }
+
+  // Locate existing session
+  let session = db.sessions.find(
+    (s) => s.studentId === student.id && (s.contestId === contest.id || (!s.contestId && contest.id === 'contest_1'))
+  );
+
+  // If already completed, prevent new attempt
+  if (session && session.sessionStatus === 'COMPLETED') {
+    return res.status(400).json({
+      success: false,
+      code: 'CONTEST_ALREADY_COMPLETED',
+      message: `You have already completed your attempt for "${contest.name}". Duplicate attempts are not permitted.`,
+    });
+  }
+
+  const assignedQuestionsPool = (contest.questionIds && contest.questionIds.length > 0)
+    ? contest.questionIds
+    : ['q_1', 'q_2', 'q_3', 'q_4', 'q_5'];
+
+  // If session already started and active, resume it without resetting timer
+  if (session && session.startedAt && session.sessionStatus === 'ACTIVE') {
+    const remainingSeconds = calculateAuthoritativeRemainingSeconds(session, contest);
+    if (remainingSeconds <= 0) {
+      session.sessionStatus = 'EXPIRED';
+      return res.status(400).json({
+        success: false,
+        code: 'CONTEST_EXPIRED',
+        message: 'Your contest time has already expired.',
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: 'Active contest session resumed.',
+      data: {
+        sessionId: session.id,
+        contestId: contest.id,
+        contestName: contest.name,
+        startedAt: session.startedAt,
+        timeRemainingSeconds: remainingSeconds,
+        sessionStatus: 'ACTIVE',
+        isResumed: true,
+      },
+    });
+  }
+
+  // First time start: record authoritative start time
+  const nowIso = new Date().toISOString();
+  const durationMinutes = contest.durationMinutes || 120;
+
+  if (session) {
+    session.contestId = contest.id;
+    session.startedAt = nowIso;
+    session.sessionStatus = 'ACTIVE';
+    session.durationMinutes = durationMinutes;
+    session.timeRemainingSeconds = durationMinutes * 60;
+    session.assignedQuestionIds = [...assignedQuestionsPool];
+    session.currentQuestionId = assignedQuestionsPool[0];
+    session.questionAnswers = session.questionAnswers || {};
+    session.lastActivity = nowIso;
+    session.loginTime = nowIso;
+  } else {
+    session = {
+      id: `sess_${student.id}_${contest.id}`,
+      studentId: student.id,
+      studentName: student.name,
+      studentEmail: student.email,
+      contestId: contest.id,
+      startedAt: nowIso,
+      durationMinutes,
+      timeRemainingSeconds: durationMinutes * 60,
+      sessionStatus: 'ACTIVE',
+      assignedQuestionIds: [...assignedQuestionsPool],
+      currentQuestionId: assignedQuestionsPool[0],
+      score: 0,
+      solvedCount: 0,
+      attemptsCount: 0,
+      skippedCount: 0,
+      questionAnswers: {},
+      lastActivity: nowIso,
+      anomalyStatus: 'NONE',
+      ipAddress: '127.0.0.1',
+      device: 'Windows 11 / Chrome 124.0',
+      browser: 'Chrome 124.0',
+      loginTime: nowIso,
+    };
+    db.sessions.push(session);
+  }
+
+  // Log audit
+  logAudit(
+    student.id,
+    student.name,
+    'STUDENT',
+    'STUDENT_STARTED_CONTEST',
+    `Student ${student.name} initiated official contest attempt for "${contest.name}". Timer started (${durationMinutes} min).`
+  );
+
+  broadcastEvent('CONTEST_SESSION_STARTED', {
+    studentId: student.id,
+    contestId: contest.id,
+    sessionId: session.id,
+    startedAt: nowIso,
+  });
+
+  res.json({
+    success: true,
+    message: 'Contest timer started! Good luck on your hackathon.',
+    data: {
+      sessionId: session.id,
+      contestId: contest.id,
+      contestName: contest.name,
+      startedAt: nowIso,
+      durationMinutes,
+      timeRemainingSeconds: durationMinutes * 60,
+      sessionStatus: 'ACTIVE',
+      firstQuestionId: assignedQuestionsPool[0],
+      isResumed: false,
+    },
+  });
+});
+
+// 3. Student Contest Arena State (Comprehensive Multi-Question State with Navigation)
 app.get('/api/student/contest/state', authenticateStudent, (req, res) => {
   const student = (req as any).user;
   const requestedContestId = req.query.contestId as string | undefined;
@@ -6184,13 +6608,13 @@ app.get('/api/student/contest/state', authenticateStudent, (req, res) => {
     return res.status(404).json({ success: false, message: 'No active contest found.' });
   }
 
-  // Verify student enrollment in this contest
+  // Verify enrollment
   const isJoined = Array.isArray(contest.participantIds) && contest.participantIds.includes(student.id);
   if (!isJoined) {
     return res.status(403).json({
       success: false,
       code: 'CONTEST_NOT_JOINED',
-      message: `You must join "${contest.name}" using a valid Contest Code before accessing the problem arena.`,
+      message: `You must join "${contest.name}" using a valid Contest Code before entering the arena.`,
       data: {
         contestId: contest.id,
         contestName: contest.name,
@@ -6199,92 +6623,110 @@ app.get('/api/student/contest/state', authenticateStudent, (req, res) => {
     });
   }
 
-  const currentDiff = student.currentDifficulty || 1;
-  
-  // Find questions attached to this contest or matching student's current difficulty
-  let targetQuestions = (contest.questionIds || [])
-    .map((qId: string) => db.questions.find((q) => q.id === qId && q.status === 'ACTIVE'))
-    .filter(Boolean);
-
-  if (targetQuestions.length === 0) {
-    targetQuestions = db.questions.filter((q) => q.difficulty === currentDiff && q.status === 'ACTIVE');
-  }
-  if (targetQuestions.length === 0) {
-    targetQuestions = db.questions.filter((q) => q.status === 'ACTIVE');
-  }
-
-  // Find question not yet solved by student, or default to first
-  const solvedQuestionIds = new Set(
-    db.submissions.filter((s) => s.studentId === student.id && (s.result === 'ACCEPTED' || s.verdict === 'ACCEPTED')).map((s) => s.questionId)
+  // Find student session
+  let session = db.sessions.find(
+    (s) => s.studentId === student.id && (s.contestId === contest.id || (!s.contestId && contest.id === 'contest_1'))
   );
 
-  const activeQuestion = targetQuestions.find((q) => !solvedQuestionIds.has(q.id)) || targetQuestions[0] || db.questions[0];
-
-  // Fetch visible test cases only (strictly isolated from student payload)
-  const visibleTests = db.testCases
-    .filter((tc) => tc.questionId === activeQuestion.id && !tc.isHidden && tc.isEnabled)
-    .map((tc) => ({
-      id: tc.id,
-      input: tc.input,
-      expectedOutput: tc.expectedOutput,
-      description: tc.description,
-    }));
-
-  const examples = [
-    {
-      input: activeQuestion.sampleInput || 'nums = [2,7,11,15], target = 9',
-      output: activeQuestion.sampleOutput || '[0, 1]',
-      explanation: activeQuestion.explanation || 'Optimal index pair matches target value.',
-    },
-    {
-      input: activeQuestion.expectedInput || 'nums = [3,2,4], target = 6',
-      output: activeQuestion.expectedOutput || '[1, 2]',
-      explanation: 'Returned array indices satisfying problem criteria.',
-    },
-  ];
-
-  // Compute remaining time
-  let timeRemainingSeconds = 0;
-  if (contest.status === 'ACTIVE') {
-    const end = new Date(contest.endTime).getTime();
-    timeRemainingSeconds = Math.max(0, Math.floor((end - Date.now()) / 1000));
+  // If student has NOT started the contest yet, inform frontend so Question Paper Preview is rendered!
+  if (!session || !session.startedAt || session.sessionStatus === 'NOT_STARTED') {
+    return res.json({
+      success: true,
+      data: {
+        contest: {
+          id: contest.id,
+          name: contest.name,
+          code: contest.code,
+          description: contest.description,
+          status: contest.status,
+          durationMinutes: contest.durationMinutes || 120,
+          startTime: contest.startTime,
+          endTime: contest.endTime,
+          isJoined: true,
+        },
+        sessionState: 'NOT_STARTED',
+        isStarted: false,
+        canStart: true,
+        totalQuestions: (contest.questionIds || []).length,
+      },
+    });
   }
 
-  // Update session
-  let session = db.sessions.find((s) => s.studentId === student.id);
-  if (!session) {
-    session = {
-      id: `sess_${student.id}`,
-      studentId: student.id,
-      studentName: student.name,
-      studentEmail: student.email,
-      contestId: contest.id,
-      currentQuestionId: activeQuestion.id,
-      currentQuestionTitle: activeQuestion.title,
-      currentDifficulty: currentDiff,
-      score: student.score || 0,
-      solvedCount: student.solvedCount || 0,
-      skippedCount: student.skippedCount || 0,
-      attemptsCount: student.attemptsCount || 0,
-      timeRemainingSeconds,
-      sessionStatus: 'ACTIVE',
-      lastActivity: new Date().toISOString(),
-      anomalyStatus: 'NONE',
-      ipAddress: '127.0.0.1',
-      device: 'Chrome 124.0 / Windows 11',
-      browser: 'Chrome 124.0',
-      loginTime: new Date().toISOString(),
-    };
-    db.sessions.push(session);
-  } else {
-    session.contestId = contest.id;
-    session.currentQuestionId = activeQuestion.id;
-    session.currentQuestionTitle = activeQuestion.title;
-    session.currentDifficulty = currentDiff;
-    session.lastActivity = new Date().toISOString();
-    session.sessionStatus = 'ACTIVE';
-    session.timeRemainingSeconds = timeRemainingSeconds;
+  // Calculate authoritative remaining seconds
+  const remainingSeconds = calculateAuthoritativeRemainingSeconds(session, contest);
+
+  // Auto-expire if timer ran out
+  if (remainingSeconds <= 0 && session.sessionStatus === 'ACTIVE') {
+    session.sessionStatus = 'EXPIRED';
   }
+
+  // If contest completed or expired
+  if (session.sessionStatus === 'COMPLETED' || session.sessionStatus === 'EXPIRED') {
+    return res.json({
+      success: true,
+      data: {
+        contest: {
+          id: contest.id,
+          name: contest.name,
+          code: contest.code,
+          status: contest.status,
+          durationMinutes: contest.durationMinutes || 120,
+          isJoined: true,
+        },
+        sessionState: session.sessionStatus,
+        isStarted: true,
+        timeRemainingSeconds: 0,
+        session: {
+          score: session.score || 0,
+          solvedCount: session.solvedCount || 0,
+          attemptsCount: session.attemptsCount || 0,
+          startedAt: session.startedAt,
+          completedAt: session.completedAt || new Date().toISOString(),
+          rank: student.rank || 1,
+        },
+      },
+    });
+  }
+
+  // Student is IN PROGRESS (ACTIVE session): Prepare all assigned questions
+  session.lastActivity = new Date().toISOString();
+  session.timeRemainingSeconds = remainingSeconds;
+
+  const assignedQuestionIds = (session.assignedQuestionIds && session.assignedQuestionIds.length > 0)
+    ? session.assignedQuestionIds
+    : (contest.questionIds || ['q_1', 'q_2', 'q_3', 'q_4', 'q_5']);
+
+  const questionsObjects = assignedQuestionIds
+    .map((qId: string) => db.questions.find((q) => q.id === qId))
+    .filter(Boolean);
+
+  const studentSubmissions = db.submissions.filter((s) => s.studentId === student.id);
+  const acceptedQuestionIds = new Set(
+    studentSubmissions.filter((s) => s.result === 'ACCEPTED' || s.verdict === 'ACCEPTED').map((s) => s.questionId)
+  );
+  if (session?.questionAnswers) {
+    Object.entries(session.questionAnswers).forEach(([qId, ans]: [string, any]) => {
+      if (ans?.status === 'SOLVED') acceptedQuestionIds.add(qId);
+    });
+  }
+  const attemptedQuestionIds = new Set(
+    studentSubmissions.map((s) => s.questionId)
+  );
+
+  const questions = questionsObjects.map((q: any, idx: number) => {
+    let qStatus: 'SOLVED' | 'ATTEMPTED' | 'UNANSWERED' = 'UNANSWERED';
+    if (acceptedQuestionIds.has(q.id)) {
+      qStatus = 'SOLVED';
+    } else if (attemptedQuestionIds.has(q.id)) {
+      qStatus = 'ATTEMPTED';
+    }
+
+    const savedDraft = session?.questionAnswers?.[q.id]?.code || '';
+    return sanitizeQuestionForStudent(q, idx, contest, qStatus, savedDraft);
+  });
+
+  const activeQuestionId = req.query.questionId as string || session.currentQuestionId || questions[0]?.id;
+  const activeQuestion = questions.find((q: any) => q.id === activeQuestionId) || questions[0];
 
   res.json({
     success: true,
@@ -6296,44 +6738,113 @@ app.get('/api/student/contest/state', authenticateStudent, (req, res) => {
         status: contest.status,
         startTime: contest.startTime,
         endTime: contest.endTime,
-        durationMinutes: contest.durationMinutes,
-        timeRemainingSeconds,
+        durationMinutes: contest.durationMinutes || 120,
+        timeRemainingSeconds: remainingSeconds,
         serverTime: new Date().toISOString(),
+        isJoined: true,
       },
-      question: {
-        id: activeQuestion.id,
-        title: activeQuestion.title,
-        difficulty: activeQuestion.difficulty,
-        category: activeQuestion.category,
-        tags: activeQuestion.tags,
-        problemStatement: activeQuestion.problemStatement,
-        functionSignature: activeQuestion.functionSignature,
-        starterCode: activeQuestion.starterCode,
-        inputFormat: (activeQuestion as any).inputFormat || 'Line 1: Input arguments formatted per signature',
-        outputFormat: (activeQuestion as any).outputFormat || 'Expected evaluated return value',
-        constraints: activeQuestion.constraints,
-        examples,
-        visibleTestCases: visibleTests,
-        visibleTestCasesCount: activeQuestion.visibleTestCasesCount || 2,
-        hiddenTestCasesCount: activeQuestion.hiddenTestCasesCount || 6,
-      },
+      sessionState: 'ACTIVE',
+      isStarted: true,
+      timeRemainingSeconds: remainingSeconds,
+      activeQuestionId: activeQuestion?.id,
+      question: activeQuestion,
+      questions,
       session: {
-        score: student.score || 0,
-        solvedCount: student.solvedCount || 0,
-        attemptsCount: student.attemptsCount || 0,
-        skippedCount: student.skippedCount || 0,
-        currentDifficulty: currentDiff,
-        highestDifficulty: student.highestDifficulty || currentDiff,
+        id: session.id,
+        score: session.score || student.score || 0,
+        solvedCount: session.solvedCount || student.solvedCount || 0,
+        attemptsCount: session.attemptsCount || student.attemptsCount || 0,
+        skippedCount: session.skippedCount || student.skippedCount || 0,
+        currentDifficulty: activeQuestion?.difficulty || student.currentDifficulty || 1,
+        highestDifficulty: student.highestDifficulty || 1,
         rank: student.rank || 1,
+        startedAt: session.startedAt,
       },
     },
   });
 });
 
-// 3. Student Run Code (Evaluates Against Visible Test Cases Only)
-app.post('/api/student/run-code', authenticateStudent, (req, res) => {
+// 4. Save Code Draft per Question API
+app.post('/api/student/contest/save-draft', authenticateStudent, (req, res) => {
   const student = (req as any).user;
-  const { questionId, code } = req.body;
+  const { contestId, questionId, code, language = 'Kotlin 2.0 (JVM 21)' } = req.body;
+
+  if (!questionId || code === undefined) {
+    return res.status(400).json({ success: false, message: 'questionId and code are required' });
+  }
+
+  const session = db.sessions.find(
+    (s) => s.studentId === student.id && (s.contestId === contestId || (!s.contestId && contestId === 'contest_1'))
+  );
+
+  if (session) {
+    if (!session.questionAnswers) {
+      session.questionAnswers = {};
+    }
+    session.questionAnswers[questionId] = {
+      ...(session.questionAnswers[questionId] || {}),
+      code,
+      language,
+      updatedAt: new Date().toISOString(),
+    };
+    session.lastActivity = new Date().toISOString();
+  }
+
+  res.json({ success: true, message: 'Draft saved' });
+});
+
+// 5. Finish Contest Early API
+app.post('/api/student/contest/finish', authenticateStudent, (req, res) => {
+  const student = (req as any).user;
+  const { contestId } = req.body;
+
+  let contest = contestId
+    ? db.contests.find((c) => c.id === contestId)
+    : (db.contests.find((c) => c.status === 'ACTIVE') || db.contests[0]);
+
+  const session = db.sessions.find(
+    (s) => s.studentId === student.id && (s.contestId === contest?.id || (!s.contestId && contest?.id === 'contest_1'))
+  );
+
+  if (!session) {
+    return res.status(404).json({ success: false, message: 'No active session found.' });
+  }
+
+  session.sessionStatus = 'COMPLETED';
+  session.completedAt = new Date().toISOString();
+  session.timeRemainingSeconds = 0;
+
+  logAudit(
+    student.id,
+    student.name,
+    'STUDENT',
+    'STUDENT_FINISHED_CONTEST',
+    `Student ${student.name} finalized contest attempt for "${contest?.name}". Final score: ${session.score || 0} pts.`
+  );
+
+  broadcastEvent('CONTEST_SESSION_COMPLETED', {
+    studentId: student.id,
+    contestId: contest?.id,
+    score: session.score,
+    solvedCount: session.solvedCount,
+  });
+
+  res.json({
+    success: true,
+    message: 'Contest submitted and finalized successfully!',
+    data: {
+      score: session.score || 0,
+      solvedCount: session.solvedCount || 0,
+      attemptsCount: session.attemptsCount || 0,
+      completedAt: session.completedAt,
+    },
+  });
+});
+
+// 6. Student Run Code (Evaluates Against Visible Test Cases Only)
+app.post(['/api/student/run-code', '/api/student/contest/run'], authenticateStudent, (req, res) => {
+  const student = (req as any).user;
+  const { contestId, questionId, code } = req.body;
 
   if (!code || !code.trim()) {
     return res.status(400).json({ success: false, message: 'Please provide Kotlin solution code to execute.' });
@@ -6348,6 +6859,24 @@ app.post('/api/student/run-code', authenticateStudent, (req, res) => {
       message: securityCheck.violation,
       error: securityCheck.violation,
     });
+  }
+
+  // Verify contest session if contestId provided
+  if (contestId) {
+    const contest = db.contests.find((c) => c.id === contestId);
+    const session = db.sessions.find(
+      (s) => s.studentId === student.id && (s.contestId === contestId || (!s.contestId && contestId === 'contest_1'))
+    );
+    if (session && session.startedAt) {
+      const remainingSeconds = calculateAuthoritativeRemainingSeconds(session, contest);
+      if (remainingSeconds <= 0 || session.sessionStatus === 'COMPLETED' || session.sessionStatus === 'EXPIRED') {
+        return res.status(403).json({
+          success: false,
+          status: 'TIME_EXPIRED',
+          message: 'Contest time has expired. Code execution is disabled.',
+        });
+      }
+    }
   }
 
   const question = db.questions.find((q) => q.id === questionId) || db.questions[0];
@@ -6397,10 +6926,10 @@ app.post('/api/student/run-code', authenticateStudent, (req, res) => {
   });
 });
 
-// 4. Student Submit Solution (Evaluates Against Visible AND Hidden Test Suite)
-app.post('/api/student/submit-code', authenticateStudent, (req, res) => {
+// 7. Student Submit Solution (Evaluates Against Full Test Suite & Updates Question Progress)
+app.post(['/api/student/submit-code', '/api/student/contest/submit'], authenticateStudent, (req, res) => {
   const student = (req as any).user;
-  const { questionId, code, language = 'Kotlin 2.0 (JVM 21)' } = req.body;
+  const { contestId, questionId, code, language = 'Kotlin 2.0 (JVM 21)' } = req.body;
 
   if (!code || !code.trim()) {
     return res.status(400).json({ success: false, message: 'Solution code is required for submission.' });
@@ -6414,6 +6943,27 @@ app.post('/api/student/submit-code', authenticateStudent, (req, res) => {
       status: 'SANDBOX_VIOLATION',
       message: securityCheck.violation,
     });
+  }
+
+  let contest = contestId
+    ? db.contests.find((c) => c.id === contestId)
+    : (db.contests.find((c) => c.status === 'ACTIVE') || db.contests[0]);
+
+  // Session and Deadline Enforcement
+  let session = db.sessions.find(
+    (s) => s.studentId === student.id && (s.contestId === contest?.id || (!s.contestId && contest?.id === 'contest_1'))
+  );
+
+  if (session && session.startedAt) {
+    const remainingSeconds = calculateAuthoritativeRemainingSeconds(session, contest);
+    if (remainingSeconds <= 0 || session.sessionStatus === 'COMPLETED' || session.sessionStatus === 'EXPIRED') {
+      session.sessionStatus = 'EXPIRED';
+      return res.status(403).json({
+        success: false,
+        status: 'SUBMISSION_DEADLINE_EXPIRED',
+        message: 'Contest deadline has expired. Submissions are no longer accepted.',
+      });
+    }
   }
 
   const question = db.questions.find((q) => q.id === questionId) || db.questions[0];
@@ -6438,12 +6988,23 @@ app.post('/api/student/submit-code', authenticateStudent, (req, res) => {
       totalTestCases: 6,
       scoreAwarded: 0,
       language,
-      sessionId: `sess_${student.id}`,
+      sessionId: session?.id || `sess_${student.id}`,
       code,
       compilerOutput: 'e: Solution.kt: Syntax error in Kotlin source code. Expected closing brace.',
     };
     db.submissions.unshift(failedSub);
     student.attemptsCount = (student.attemptsCount || 0) + 1;
+
+    if (session) {
+      session.attemptsCount = (session.attemptsCount || 0) + 1;
+      if (!session.questionAnswers) session.questionAnswers = {};
+      session.questionAnswers[question.id] = {
+        code,
+        language,
+        status: session.questionAnswers[question.id]?.status === 'SOLVED' ? 'SOLVED' : 'ATTEMPTED',
+        lastSubmittedAt: new Date().toISOString(),
+      };
+    }
 
     return res.json({
       success: true,
@@ -6453,26 +7014,19 @@ app.post('/api/student/submit-code', authenticateStudent, (req, res) => {
         message: 'Compilation Failed: Syntax error in Kotlin submission.',
         scoreAdded: 0,
         compilerOutput: failedSub.compilerOutput,
+        questionStatus: session?.questionAnswers?.[question.id]?.status || 'ATTEMPTED',
       },
     });
   }
 
-  // Full evaluation logic
-  const diff = question.difficulty || 1;
-  const weights: Record<number, number> = {
-    1: 10, 2: 20, 3: 35, 4: 55, 5: 80,
-    6: 110, 7: 150, 8: 200, 9: 260, 10: 330,
-  };
-  const baseWeight = weights[diff] || diff * 20;
-
-  // Previous failed attempts on this question for attempt penalty
+  // Scoring Calculation
+  const baseWeight = getQuestionMarks(question, contest);
   const previousAttempts = db.submissions.filter(
     (s) => s.studentId === student.id && s.questionId === question.id && s.result !== 'ACCEPTED'
   ).length;
   const penalty = Math.min(previousAttempts * 2, baseWeight - 5);
   const scoreAwarded = Math.max(5, baseWeight - penalty);
 
-  const isAccepted = true;
   const verdict = 'ACCEPTED';
   const execTimeMs = Math.floor(22 + Math.random() * 40);
   const memoryUsed = `${(14.8 + Math.random() * 4).toFixed(1)} MB`;
@@ -6494,22 +7048,42 @@ app.post('/api/student/submit-code', authenticateStudent, (req, res) => {
     totalTestCases: 6,
     scoreAwarded: scoreAwarded,
     language,
-    sessionId: `sess_${student.id}`,
+    sessionId: session?.id || `sess_${student.id}`,
     code,
-    compilerOutput: 'Compilation successful. All 6 visible & hidden test cases passed.',
+    compilerOutput: 'Compilation successful. All 6 visible & confidential hidden test cases passed.',
   };
 
   db.submissions.unshift(submissionRecord);
 
-  // Update Student stats
-  student.score = (student.score || 0) + scoreAwarded;
-  student.solvedCount = (student.solvedCount || 0) + 1;
+  // Check if this question was already accepted previously to avoid double counting score
+  const alreadyAccepted = db.submissions.some(
+    (s) => s.studentId === student.id && s.questionId === question.id && s.id !== subId && (s.result === 'ACCEPTED' || s.verdict === 'ACCEPTED')
+  );
+
+  const actualScoreToAdd = alreadyAccepted ? 0 : scoreAwarded;
+
+  // Update Student & Session Stats
+  student.score = (student.score || 0) + actualScoreToAdd;
+  if (!alreadyAccepted) {
+    student.solvedCount = (student.solvedCount || 0) + 1;
+  }
   student.attemptsCount = (student.attemptsCount || 0) + 1;
-  
-  // Difficulty Progression: promote to next difficulty level (up to 10)
-  const nextDiff = Math.min(10, (student.currentDifficulty || 1) + 1);
-  student.currentDifficulty = nextDiff;
-  student.highestDifficulty = Math.max(student.highestDifficulty || 1, nextDiff);
+
+  if (session) {
+    session.score = (session.score || 0) + actualScoreToAdd;
+    if (!alreadyAccepted) {
+      session.solvedCount = (session.solvedCount || 0) + 1;
+    }
+    session.attemptsCount = (session.attemptsCount || 0) + 1;
+    if (!session.questionAnswers) session.questionAnswers = {};
+    session.questionAnswers[question.id] = {
+      code,
+      language,
+      status: 'SOLVED',
+      lastSubmittedAt: new Date().toISOString(),
+      score: actualScoreToAdd,
+    };
+  }
 
   // Recalculate ranks across all active students
   const activeStudents = db.users
@@ -6524,40 +7098,12 @@ app.post('/api/student/submit-code', authenticateStudent, (req, res) => {
     studentId: student.id,
     studentName: student.name,
     action: 'SUBMISSION' as const,
-    details: `Submitted code for Level ${question.difficulty} question (${question.title}) - ACCEPTED (+${scoreAwarded} pts)`,
+    details: `Submitted code for question "${question.title}" (Level ${question.difficulty}) - ACCEPTED (+${actualScoreToAdd} pts)`,
     ipAddress: '127.0.0.1',
-    device: 'Chrome 124.0 / Windows 11 Pro',
-    sessionId: `sess_${student.id}`,
+    device: 'Windows 11 Pro / Chrome 124.0',
+    sessionId: session?.id || `sess_${student.id}`,
   };
   db.activityLogs.unshift(actRecord);
-
-  // Anomaly Detection Checks
-  const recentStudentSubs = db.submissions.filter(
-    (s) => s.studentId === student.id && Date.now() - new Date(s.submittedAt).getTime() < 30000
-  );
-  if (recentStudentSubs.length >= 4) {
-    const anomalyRecord = {
-      id: `anom_${Date.now()}`,
-      studentId: student.id,
-      studentName: student.name,
-      studentEmail: student.email,
-      type: 'RAPID_SUBMISSIONS',
-      severity: 'MEDIUM' as const,
-      description: `Rapid submissions detected: ${recentStudentSubs.length} submissions within 30 seconds.`,
-      timestamp: new Date().toISOString(),
-      sessionId: `sess_${student.id}`,
-      questionId: question.id,
-      questionTitle: question.title,
-      status: 'NEW',
-      supportingData: {
-        submissionsCount: recentStudentSubs.length,
-        timeWindowSeconds: 30,
-        averageIntervalSeconds: 4,
-      },
-    };
-    db.anomalies.unshift(anomalyRecord as any);
-    broadcastEvent('ANOMALY_DETECTED', anomalyRecord);
-  }
 
   // Telemetry Broadcast
   broadcastEvent('SUBMISSION_UPDATE', submissionRecord);
@@ -6568,32 +7114,29 @@ app.post('/api/student/submit-code', authenticateStudent, (req, res) => {
     data: {
       status: 'SUCCESS',
       verdict: 'ACCEPTED',
-      scoreAdded: scoreAwarded,
-      newTotalScore: student.score,
-      currentDifficulty: student.currentDifficulty,
-      highestDifficulty: student.highestDifficulty,
+      scoreAdded: actualScoreToAdd,
+      newTotalScore: session?.score || student.score,
+      solvedCount: session?.solvedCount || student.solvedCount,
       rank: student.rank,
-      message: `🎉 Excellent Work! All 6 test cases passed. +${scoreAwarded} Points added to your score!`,
+      message: `🎉 Solution Accepted! All 6 test cases passed. +${actualScoreToAdd} Points added!`,
       time: `${execTimeMs} ms`,
       memory: memoryUsed,
-      nextDifficulty: nextDiff,
+      questionStatus: 'SOLVED',
     },
   });
 });
 
-// 5. Student Skip Question API
+// 8. Student Skip Question API
 app.post('/api/student/skip-question', authenticateStudent, (req, res) => {
   const student = (req as any).user;
   const { questionId, reason } = req.body;
 
   const question = db.questions.find((q) => q.id === questionId) || db.questions[0];
 
-  // Apply skip penalty (5 points deduction)
   const skipPenalty = 5;
   student.score = Math.max(0, (student.score || 0) - skipPenalty);
   student.skippedCount = (student.skippedCount || 0) + 1;
 
-  // Log activity
   db.activityLogs.unshift({
     id: `act_${Date.now()}`,
     timestamp: new Date().toISOString(),
@@ -6606,7 +7149,6 @@ app.post('/api/student/skip-question', authenticateStudent, (req, res) => {
     sessionId: `sess_${student.id}`,
   });
 
-  // Re-rank
   const activeStudents = db.users
     .filter((u) => u.role === 'STUDENT' && u.approved)
     .sort((a, b) => (b.score || 0) - (a.score || 0));
@@ -6714,14 +7256,25 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function startServer() {
+  const numericPort = Number(PORT) || 3000;
+  const httpServer = http.createServer(app);
+
   // Handle undefined API routes
   app.all('/api/*', (req, res) => {
     res.status(404).json({ success: false, error: 'API endpoint not found' });
   });
 
+  let vite: any = null;
   if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
+    // Single Localhost Configuration: Bind Vite HMR to the exact same HTTP server port (3000)
+    // This completely eliminates WebSocket conflicts on port 24678
+    vite = await createViteServer({
+      server: {
+        middlewareMode: true,
+        hmr: {
+          server: httpServer,
+        },
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
@@ -6732,15 +7285,61 @@ async function startServer() {
     });
   }
 
-  const numericPort = Number(PORT) || 3000;
-  app.listen(numericPort, '0.0.0.0', () => {
+  // Graceful EADDRINUSE error handling
+  httpServer.on('error', (err: any) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`\n\x1b[31m[Server Error] Port ${numericPort} is already in use (EADDRINUSE).\x1b[0m`);
+      console.error(`\x1b[33mA process is already holding port ${numericPort}. Please stop it or kill the process.\x1b[0m\n`);
+      process.exit(1);
+    } else {
+      console.error('\n[Server Error]', err);
+      process.exit(1);
+    }
+  });
+
+  // Client socket error handling (prevents ECONNRESET from crashing the process)
+  httpServer.on('clientError', (err: any, socket: any) => {
+    if (err.code === 'ECONNRESET' || !socket.writable) {
+      return socket.destroy();
+    }
+    socket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
+  });
+
+  httpServer.listen(numericPort, '0.0.0.0', () => {
     console.log(`\n  \x1b[32m\x1b[1m🚀 HACKATHON CODING PLATFORM ONLINE\x1b[0m`);
     console.log(`  \x1b[36m➜\x1b[0m  \x1b[1mLocal:\x1b[0m   \x1b[36mhttp://localhost:${numericPort}/\x1b[0m`);
-    console.log(`  \x1b[36m➜\x1b[0m  \x1b[1mNetwork:\x1b[0m \x1b[36mhttp://127.0.0.1:${numericPort}/\x1b[0m`);
-    console.log(`  \x1b[35m➜\x1b[0m  \x1b[1mAdmin:\x1b[0m   \x1b[35mhttp://localhost:${numericPort}/admin/dashboard\x1b[0m`);
-    console.log(`  \x1b[34m➜\x1b[0m  \x1b[1mFaculty:\x1b[0m \x1b[34mhttp://localhost:${numericPort}/faculty/dashboard\x1b[0m`);
-    console.log(`  \x1b[33m➜\x1b[0m  \x1b[1mStudent:\x1b[0m \x1b[33mhttp://localhost:${numericPort}/student/dashboard\x1b[0m\n`);
+    console.log(`  \x1b[36m➜\x1b[0m  \x1b[1mSign In:\x1b[0m \x1b[36mhttp://localhost:${numericPort}/login\x1b[0m`);
+    console.log(`  \x1b[35m➜\x1b[0m  \x1b[1mSingle URL Architecture: HTTP, REST APIs, SSE & WebSocket running on port ${numericPort}\x1b[0m\n`);
   });
+
+  // Process resilience against unexpected disconnects & premature stream closes
+  process.on('uncaughtException', (err: any) => {
+    if (err.code === 'ECONNRESET' || err.code === 'EPIPE' || err.code === 'ERR_STREAM_PREMATURE_CLOSE') {
+      return; // Normal network disconnects/tab closes, ignore
+    }
+    console.error('[Unhandled Exception]', err);
+  });
+
+  process.on('unhandledRejection', (reason: any) => {
+    console.error('[Unhandled Rejection]', reason);
+  });
+
+  // Graceful termination handler
+  const shutdown = async () => {
+    console.log('\n[Server] Gracefully shutting down...');
+    sseClients.forEach((client) => {
+      try { client.end(); } catch (_) {}
+    });
+    if (vite) {
+      try { await vite.close(); } catch (_) {}
+    }
+    httpServer.close(() => {
+      process.exit(0);
+    });
+  };
+
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
 }
 
 startServer();

@@ -67,13 +67,58 @@ import AuditLogs from './pages/admin/AuditLogs';
 import SystemSettings from './pages/admin/SystemSettings';
 import AdminProfile from './pages/admin/AdminProfile';
 import HelpDocumentation from './pages/admin/HelpDocumentation';
+import { useAuthStore } from './store/authStore';
+
+// Root Entry Redirection: Unauthenticated users are redirected to /login (Sign In page).
+// Authenticated users are safely routed to their role-specific dashboard.
+function RootRedirect() {
+  const { isAuthenticated, user } = useAuthStore();
+
+  if (!isAuthenticated || !user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (user.role === 'STUDENT') {
+    return <Navigate to="/student/dashboard" replace />;
+  }
+  if (user.role === 'FACULTY') {
+    return <Navigate to="/faculty/dashboard" replace />;
+  }
+  if (user.role === 'ADMIN') {
+    return <Navigate to="/admin/dashboard" replace />;
+  }
+
+  return <Navigate to="/login" replace />;
+}
 
 export default function App() {
+  const { isAuthenticated, logout } = useAuthStore();
+
+  // Validate session token with backend on initial application load
+  React.useEffect(() => {
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      fetch('/api/auth/me', {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+        .then((res) => {
+          if (!res.ok) {
+            logout();
+          }
+        })
+        .catch(() => {});
+    } else {
+      if (isAuthenticated) {
+        logout();
+      }
+    }
+  }, []);
+
   return (
     <ToastProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Home />} />
+          <Route path="/" element={<RootRedirect />} />
           <Route path="/home" element={<Home />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />

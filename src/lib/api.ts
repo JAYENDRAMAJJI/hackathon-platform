@@ -1,6 +1,21 @@
 import { handleMockFallback } from './mockEngine';
+import { useAuthStore } from '../store/authStore';
 
 export const API_URL = '/api';
+
+class AuthRequiredError extends Error {
+  constructor(message = 'Authentication required. Please sign in.') {
+    super(message);
+    this.name = 'AuthRequiredError';
+  }
+}
+
+class ForbiddenError extends Error {
+  constructor(message = 'Access Denied: You do not have permission for this action.') {
+    super(message);
+    this.name = 'ForbiddenError';
+  }
+}
 
 const formatErrorMessage = (status: number, dataOrText: any): string => {
   if (dataOrText && typeof dataOrText === 'object') {
@@ -25,9 +40,25 @@ const formatErrorMessage = (status: number, dataOrText: any): string => {
   return `Request completed with status ${status}`;
 };
 
+const isProtectedEndpoint = (endpoint: string): boolean => {
+  const clean = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  return (
+    clean.startsWith('/admin') ||
+    clean.startsWith('/faculty') ||
+    clean.startsWith('/student')
+  );
+};
+
 export const apiClient = {
   async get(endpoint: string, params?: Record<string, string | number | boolean | undefined>) {
     const token = localStorage.getItem('auth_token');
+    
+    // Strict Auth Check: Do not permit unauthenticated access to protected dashboard endpoints
+    if (isProtectedEndpoint(endpoint) && !token) {
+      useAuthStore.getState().logout();
+      throw new AuthRequiredError('Authentication required. Please sign in.');
+    }
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
@@ -53,10 +84,19 @@ export const apiClient = {
       const response = await fetch(url, { headers });
       const contentType = response.headers.get("content-type") || '';
       
+      if (response.status === 401) {
+        useAuthStore.getState().logout();
+        throw new AuthRequiredError('Authentication required. Please sign in again.');
+      }
+
+      if (response.status === 403) {
+        throw new ForbiddenError('Access Denied (403): You do not have permission for this action.');
+      }
+
       if (contentType.includes("application/json")) {
         const data = await response.json();
         if (!response.ok) {
-          if (response.status >= 500 || response.status === 404) {
+          if ((response.status >= 500 || response.status === 404) && !isProtectedEndpoint(endpoint)) {
             return handleMockFallback('GET', endpoint, undefined, params);
           }
           throw new Error(formatErrorMessage(response.status, data));
@@ -65,7 +105,10 @@ export const apiClient = {
       } else {
         const text = await response.text();
         if (!response.ok) {
-          return handleMockFallback('GET', endpoint, undefined, params);
+          if (!isProtectedEndpoint(endpoint)) {
+            return handleMockFallback('GET', endpoint, undefined, params);
+          }
+          throw new Error(`Request failed with status ${response.status}`);
         }
         try {
           return JSON.parse(text);
@@ -74,6 +117,12 @@ export const apiClient = {
         }
       }
     } catch (error: any) {
+      if (error instanceof AuthRequiredError || error instanceof ForbiddenError || error?.name === 'AuthRequiredError' || error?.name === 'ForbiddenError') {
+        throw error;
+      }
+      if (isProtectedEndpoint(endpoint) && !token) {
+        throw error;
+      }
       console.warn(`[apiClient] Using resilient fallback for GET ${endpoint}`, error);
       return handleMockFallback('GET', endpoint, undefined, params);
     }
@@ -81,6 +130,13 @@ export const apiClient = {
 
   async post(endpoint: string, data?: any) {
     const token = localStorage.getItem('auth_token');
+    
+    // Strict Auth Check for protected post endpoints
+    if (isProtectedEndpoint(endpoint) && !token) {
+      useAuthStore.getState().logout();
+      throw new AuthRequiredError('Authentication required. Please sign in.');
+    }
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
@@ -97,11 +153,20 @@ export const apiClient = {
         body: data !== undefined ? JSON.stringify(data) : undefined,
       });
       
+      if (response.status === 401) {
+        useAuthStore.getState().logout();
+        throw new AuthRequiredError('Authentication required. Please sign in again.');
+      }
+
+      if (response.status === 403) {
+        throw new ForbiddenError('Access Denied (403): You do not have permission for this action.');
+      }
+
       const contentType = response.headers.get("content-type") || '';
       if (contentType.includes("application/json")) {
         const responseData = await response.json();
         if (!response.ok) {
-          if (response.status >= 500 || response.status === 404) {
+          if ((response.status >= 500 || response.status === 404) && !isProtectedEndpoint(endpoint)) {
             return handleMockFallback('POST', endpoint, data);
           }
           throw new Error(formatErrorMessage(response.status, responseData));
@@ -110,7 +175,10 @@ export const apiClient = {
       } else {
         const text = await response.text();
         if (!response.ok) {
-          return handleMockFallback('POST', endpoint, data);
+          if (!isProtectedEndpoint(endpoint)) {
+            return handleMockFallback('POST', endpoint, data);
+          }
+          throw new Error(`Request failed with status ${response.status}`);
         }
         try {
           return JSON.parse(text);
@@ -119,6 +187,12 @@ export const apiClient = {
         }
       }
     } catch (error: any) {
+      if (error instanceof AuthRequiredError || error instanceof ForbiddenError || error?.name === 'AuthRequiredError' || error?.name === 'ForbiddenError') {
+        throw error;
+      }
+      if (isProtectedEndpoint(endpoint) && !token) {
+        throw error;
+      }
       console.warn(`[apiClient] Using resilient fallback for POST ${endpoint}`, error);
       return handleMockFallback('POST', endpoint, data);
     }
@@ -126,6 +200,12 @@ export const apiClient = {
 
   async put(endpoint: string, data?: any) {
     const token = localStorage.getItem('auth_token');
+    
+    if (isProtectedEndpoint(endpoint) && !token) {
+      useAuthStore.getState().logout();
+      throw new AuthRequiredError('Authentication required. Please sign in.');
+    }
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
@@ -142,11 +222,20 @@ export const apiClient = {
         body: data !== undefined ? JSON.stringify(data) : undefined,
       });
       
+      if (response.status === 401) {
+        useAuthStore.getState().logout();
+        throw new AuthRequiredError('Authentication required. Please sign in again.');
+      }
+
+      if (response.status === 403) {
+        throw new ForbiddenError('Access Denied (403): You do not have permission for this action.');
+      }
+
       const contentType = response.headers.get("content-type") || '';
       if (contentType.includes("application/json")) {
         const responseData = await response.json();
         if (!response.ok) {
-          if (response.status >= 500 || response.status === 404) {
+          if ((response.status >= 500 || response.status === 404) && !isProtectedEndpoint(endpoint)) {
             return handleMockFallback('PUT', endpoint, data);
           }
           throw new Error(formatErrorMessage(response.status, responseData));
@@ -155,7 +244,10 @@ export const apiClient = {
       } else {
         const text = await response.text();
         if (!response.ok) {
-          return handleMockFallback('PUT', endpoint, data);
+          if (!isProtectedEndpoint(endpoint)) {
+            return handleMockFallback('PUT', endpoint, data);
+          }
+          throw new Error(`Request failed with status ${response.status}`);
         }
         try {
           return JSON.parse(text);
@@ -164,6 +256,12 @@ export const apiClient = {
         }
       }
     } catch (error: any) {
+      if (error instanceof AuthRequiredError || error instanceof ForbiddenError || error?.name === 'AuthRequiredError' || error?.name === 'ForbiddenError') {
+        throw error;
+      }
+      if (isProtectedEndpoint(endpoint) && !token) {
+        throw error;
+      }
       console.warn(`[apiClient] Using resilient fallback for PUT ${endpoint}`, error);
       return handleMockFallback('PUT', endpoint, data);
     }
@@ -171,6 +269,12 @@ export const apiClient = {
 
   async patch(endpoint: string, data?: any) {
     const token = localStorage.getItem('auth_token');
+    
+    if (isProtectedEndpoint(endpoint) && !token) {
+      useAuthStore.getState().logout();
+      throw new AuthRequiredError('Authentication required. Please sign in.');
+    }
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
@@ -187,11 +291,20 @@ export const apiClient = {
         body: data !== undefined ? JSON.stringify(data) : undefined,
       });
       
+      if (response.status === 401) {
+        useAuthStore.getState().logout();
+        throw new AuthRequiredError('Authentication required. Please sign in again.');
+      }
+
+      if (response.status === 403) {
+        throw new ForbiddenError('Access Denied (403): You do not have permission for this action.');
+      }
+
       const contentType = response.headers.get("content-type") || '';
       if (contentType.includes("application/json")) {
         const responseData = await response.json();
         if (!response.ok) {
-          if (response.status >= 500 || response.status === 404) {
+          if ((response.status >= 500 || response.status === 404) && !isProtectedEndpoint(endpoint)) {
             return handleMockFallback('PATCH', endpoint, data);
           }
           throw new Error(formatErrorMessage(response.status, responseData));
@@ -200,7 +313,10 @@ export const apiClient = {
       } else {
         const text = await response.text();
         if (!response.ok) {
-          return handleMockFallback('PATCH', endpoint, data);
+          if (!isProtectedEndpoint(endpoint)) {
+            return handleMockFallback('PATCH', endpoint, data);
+          }
+          throw new Error(`Request failed with status ${response.status}`);
         }
         try {
           return JSON.parse(text);
@@ -209,6 +325,12 @@ export const apiClient = {
         }
       }
     } catch (error: any) {
+      if (error instanceof AuthRequiredError || error instanceof ForbiddenError || error?.name === 'AuthRequiredError' || error?.name === 'ForbiddenError') {
+        throw error;
+      }
+      if (isProtectedEndpoint(endpoint) && !token) {
+        throw error;
+      }
       console.warn(`[apiClient] Using resilient fallback for PATCH ${endpoint}`, error);
       return handleMockFallback('PATCH', endpoint, data);
     }
@@ -216,6 +338,12 @@ export const apiClient = {
 
   async delete(endpoint: string) {
     const token = localStorage.getItem('auth_token');
+    
+    if (isProtectedEndpoint(endpoint) && !token) {
+      useAuthStore.getState().logout();
+      throw new AuthRequiredError('Authentication required. Please sign in.');
+    }
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
@@ -231,11 +359,20 @@ export const apiClient = {
         headers,
       });
       
+      if (response.status === 401) {
+        useAuthStore.getState().logout();
+        throw new AuthRequiredError('Authentication required. Please sign in again.');
+      }
+
+      if (response.status === 403) {
+        throw new ForbiddenError('Access Denied (403): You do not have permission for this action.');
+      }
+
       const contentType = response.headers.get("content-type") || '';
       if (contentType.includes("application/json")) {
         const responseData = await response.json();
         if (!response.ok) {
-          if (response.status >= 500 || response.status === 404) {
+          if ((response.status >= 500 || response.status === 404) && !isProtectedEndpoint(endpoint)) {
             return handleMockFallback('DELETE', endpoint);
           }
           throw new Error(formatErrorMessage(response.status, responseData));
@@ -244,7 +381,10 @@ export const apiClient = {
       } else {
         const text = await response.text();
         if (!response.ok) {
-          return handleMockFallback('DELETE', endpoint);
+          if (!isProtectedEndpoint(endpoint)) {
+            return handleMockFallback('DELETE', endpoint);
+          }
+          throw new Error(`Request failed with status ${response.status}`);
         }
         try {
           return JSON.parse(text);
@@ -253,6 +393,12 @@ export const apiClient = {
         }
       }
     } catch (error: any) {
+      if (error instanceof AuthRequiredError || error instanceof ForbiddenError || error?.name === 'AuthRequiredError' || error?.name === 'ForbiddenError') {
+        throw error;
+      }
+      if (isProtectedEndpoint(endpoint) && !token) {
+        throw error;
+      }
       console.warn(`[apiClient] Using resilient fallback for DELETE ${endpoint}`, error);
       return handleMockFallback('DELETE', endpoint);
     }

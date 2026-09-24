@@ -11,6 +11,10 @@ export function ContestTimer({ initialSeconds, onExpire }: ContestTimerProps) {
   const [timeLeft, setTimeLeft] = useState(initialSeconds);
 
   useEffect(() => {
+    setTimeLeft(initialSeconds);
+  }, [initialSeconds]);
+
+  useEffect(() => {
     if (timeLeft <= 0) {
       onExpire?.();
       return;

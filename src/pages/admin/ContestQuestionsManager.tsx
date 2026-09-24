@@ -24,13 +24,19 @@ import {
   Tag,
   ShieldAlert,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
   ListPlus,
-  Info
+  Info,
+  Award,
+  ArrowUpDown,
+  FileText
 } from 'lucide-react';
 import { apiClient } from '../../lib/api';
 import { Question, Contest } from '../../types/admin';
 import { useToast } from '../../context/AdminToastContext';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
+import { QuestionPaperPreview, QuestionPaperData } from '../../components/student/QuestionPaperPreview';
 
 export default function ContestQuestionsManager() {
   const { id: contestId } = useParams<{ id: string }>();
@@ -57,6 +63,15 @@ export default function ContestQuestionsManager() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [activeQuestion, setActiveQuestion] = useState<Question | null>(null);
+
+  // Question Paper Preview & Marks Modals
+  const [paperModalOpen, setPaperModalOpen] = useState(false);
+  const [paperPreviewData, setPaperPreviewData] = useState<QuestionPaperData | null>(null);
+  const [loadingPaperPreview, setLoadingPaperPreview] = useState(false);
+  const [editingMarksModal, setEditingMarksModal] = useState<{ isOpen: boolean; question?: Question; marks: number }>({
+    isOpen: false,
+    marks: 20,
+  });
 
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
@@ -261,6 +276,64 @@ export default function ContestQuestionsManager() {
     }
   };
 
+  // Open Student Question Paper Preview in modal
+  const handleOpenPaperPreview = async () => {
+    setLoadingPaperPreview(true);
+    try {
+      const resp = await apiClient.get(`/student/contest/paper?contestId=${contestId}`);
+      if (resp.success && resp.data) {
+        setPaperPreviewData(resp.data);
+        setPaperModalOpen(true);
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to generate question paper preview');
+    } finally {
+      setLoadingPaperPreview(false);
+    }
+  };
+
+  // Reorder question in contest (Move Up / Down)
+  const handleMoveQuestion = async (idx: number, direction: 'UP' | 'DOWN') => {
+    const targetIdx = direction === 'UP' ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= contestQuestions.length) return;
+
+    const newQuestions = [...contestQuestions];
+    const temp = newQuestions[idx];
+    newQuestions[idx] = newQuestions[targetIdx];
+    newQuestions[targetIdx] = temp;
+
+    setContestQuestions(newQuestions);
+
+    try {
+      const resp = await apiClient.put(`/admin/contests/${contestId}/questions/order`, {
+        questionIds: newQuestions.map((q) => q.id),
+      });
+      if (resp.success) {
+        toast.success(`Question order updated (${direction === 'UP' ? 'Moved Up' : 'Moved Down'})`);
+      }
+    } catch (err: any) {
+      toast.error('Failed to persist question reordering');
+      loadData();
+    }
+  };
+
+  // Save custom question marks in contest
+  const handleSaveMarks = async () => {
+    if (!editingMarksModal.question) return;
+    try {
+      const resp = await apiClient.put(`/admin/contests/${contestId}/questions/${editingMarksModal.question.id}/marks`, {
+        marks: editingMarksModal.marks,
+      });
+      if (resp.success) {
+        toast.success(`Updated marks to ${editingMarksModal.marks} pts for "${editingMarksModal.question.title}"`);
+        setEditingMarksModal({ isOpen: false, marks: 20 });
+        loadData();
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save marks');
+    }
+  };
+
   // Difficulty badge color helper
   const getDifficultyBadge = (diff: number) => {
     if (diff <= 3) {
@@ -342,11 +415,21 @@ export default function ContestQuestionsManager() {
         {/* Global Actions */}
         <div className="flex flex-wrap items-center gap-3">
           <button
+            onClick={handleOpenPaperPreview}
+            disabled={loadingPaperPreview}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 text-xs font-bold transition-all shadow-sm cursor-pointer disabled:opacity-50"
+            title="Preview Official Question Paper as Student Sees It"
+          >
+            <FileText className="w-4 h-4 text-indigo-400" />
+            <span>{loadingPaperPreview ? 'Generating Paper...' : 'Preview Question Paper'}</span>
+          </button>
+
+          <button
             onClick={() => {
               setSelectedBankIds([]);
               setIsAddBankModalOpen(true);
             }}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-all shadow-sm"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-all shadow-sm cursor-pointer"
           >
             <ListPlus className="w-4 h-4 text-blue-400" /> Add from Question Manager
           </button>
@@ -561,10 +644,43 @@ export default function ContestQuestionsManager() {
               {/* Question Details */}
               <div className="space-y-2 flex-1">
                 <div className="flex flex-wrap items-center gap-2.5">
-                  <span className="text-xs text-slate-500 font-mono font-bold">#{index + 1}</span>
+                  <div className="flex items-center gap-1 bg-slate-800/80 rounded-lg p-0.5 border border-slate-700/60">
+                    <button
+                      onClick={() => handleMoveQuestion(index, 'UP')}
+                      disabled={index === 0}
+                      className="p-1 text-slate-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none rounded hover:bg-slate-700 cursor-pointer"
+                      title="Move Question Up in Paper"
+                    >
+                      <ChevronUp className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="text-xs text-white font-mono font-bold px-1">Q{index + 1}</span>
+                    <button
+                      onClick={() => handleMoveQuestion(index, 'DOWN')}
+                      disabled={index === contestQuestions.length - 1}
+                      className="p-1 text-slate-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none rounded hover:bg-slate-700 cursor-pointer"
+                      title="Move Question Down in Paper"
+                    >
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
                   <span className={`px-2.5 py-0.5 rounded-full text-xs font-extrabold border ${getDifficultyBadge(q.difficulty)}`}>
                     Level {q.difficulty}
                   </span>
+
+                  <button
+                    onClick={() => setEditingMarksModal({
+                      isOpen: true,
+                      question: q,
+                      marks: (contest as any)?.questionMarks?.[q.id] || (contest?.scoringConfig?.difficultyWeights?.[q.difficulty]) || q.difficulty * 20
+                    })}
+                    className="flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 transition-colors cursor-pointer"
+                    title="Click to edit custom marks for this question"
+                  >
+                    <Award className="w-3.5 h-3.5" />
+                    <span>{(contest as any)?.questionMarks?.[q.id] || (contest?.scoringConfig?.difficultyWeights?.[q.difficulty]) || q.difficulty * 20} pts</span>
+                  </button>
+
                   <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700">
                     {q.category}
                   </span>
@@ -1212,6 +1328,79 @@ export default function ContestQuestionsManager() {
         confirmText="Remove Question"
         variant="danger"
       />
+
+      {/* MODAL 4: Question Paper Preview (Exam layout as seen by student) */}
+      {paperModalOpen && paperPreviewData && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-5xl w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl">
+            <QuestionPaperPreview
+              paperData={paperPreviewData}
+              onStartContest={() => {}}
+              onBackToContests={() => setPaperModalOpen(false)}
+              readOnlyModal={true}
+              onCloseModal={() => setPaperModalOpen(false)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 5: Configure Question Marks */}
+      {editingMarksModal.isOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 text-white">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <h3 className="text-base font-bold flex items-center gap-2">
+                <Award className="w-5 h-5 text-amber-400" /> Configure Question Marks
+              </h3>
+              <button
+                onClick={() => setEditingMarksModal({ isOpen: false, marks: 20 })}
+                className="p-1 rounded-lg text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div>
+              <p className="text-xs text-slate-400">Target Question:</p>
+              <h4 className="text-sm font-bold text-white mt-0.5">{editingMarksModal.question?.title}</h4>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+                Score Weight / Maximum Marks (Points)
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="500"
+                value={editingMarksModal.marks}
+                onChange={(e) => setEditingMarksModal({ ...editingMarksModal, marks: Number(e.target.value) })}
+                className="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono font-bold text-sm focus:outline-none focus:border-amber-400"
+              />
+              <p className="text-[11px] text-slate-400">
+                This marks value will be displayed on the student question paper and awarded upon full evaluation.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setEditingMarksModal({ isOpen: false, marks: 20 })}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveMarks}
+                className="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs shadow-md transition-all cursor-pointer"
+              >
+                Save Marks
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
