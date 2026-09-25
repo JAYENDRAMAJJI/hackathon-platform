@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import {
   Trophy,
   Clock,
@@ -37,6 +38,10 @@ export interface QuestionPaperData {
     };
     durationMinutes: number;
     difficultyRange: [number, number];
+    maxPoints?: number;
+    maxSkips?: number;
+    remainingSkips?: number;
+    skippedCount?: number;
     startTime?: string;
     endTime?: string;
     status: string;
@@ -67,6 +72,10 @@ export interface QuestionPaperData {
   }>;
   totalQuestions: number;
   totalMarks: number;
+  maxPoints?: number;
+  maxSkips?: number;
+  remainingSkips?: number;
+  skippedCount?: number;
   sessionState?: string;
   isStarted?: boolean;
   startedAt?: string | null;
@@ -90,6 +99,8 @@ export function QuestionPaperPreview({
   readOnlyModal = false,
   onCloseModal,
 }: QuestionPaperPreviewProps) {
+  const outletCtx = useOutletContext<{ collapsed?: boolean }>() || {};
+  const isCollapsed = outletCtx?.collapsed ?? false;
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const { contest, questions, totalQuestions, totalMarks } = paperData;
 
@@ -112,7 +123,7 @@ export function QuestionPaperPreview({
   };
 
   return (
-    <div className="max-w-[1200px] mx-auto space-y-8 animate-in fade-in duration-300 pb-28 font-sans text-slate-100 print:text-black print:bg-white print:max-w-none print:p-0 print:m-0">
+    <div className="max-w-[1200px] mx-auto space-y-8 animate-in fade-in duration-300 pb-36 font-sans text-slate-100 print:text-black print:bg-white print:max-w-none print:p-0 print:m-0">
       {/* EXAM PAPER HEADER BANNER */}
       <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden backdrop-blur-md print:border-black print:bg-white print:shadow-none print:rounded-none">
         {/* Top Watermark & Meta Bar */}
@@ -216,10 +227,10 @@ export function QuestionPaperPreview({
             </span>
             <div className="flex items-center gap-1.5 text-white font-extrabold text-base mt-1 print:text-black">
               <Trophy className="w-4 h-4 text-amber-400 print:text-black" />
-              <span>{totalMarks} Points</span>
+              <span>{contest.maxPoints || totalMarks || 100} Points</span>
             </div>
-            <span className="text-[10px] text-slate-500 block mt-0.5 print:text-gray-600">
-              Max achievable score
+            <span className="text-[10px] text-amber-400 font-semibold block mt-0.5 print:text-gray-600">
+              Max achievable: 100 pts
             </span>
           </div>
 
@@ -268,6 +279,20 @@ export function QuestionPaperPreview({
               <Info className="w-4 h-4 text-blue-400 print:text-black" /> Key Technical Parameters
             </h3>
             <div className="space-y-2 text-slate-300 text-xs">
+              <div className="flex items-center justify-between pb-1.5 border-b border-slate-800/60 print:border-gray-300">
+                <span className="text-slate-400">Max Points:</span>
+                <span className="font-mono font-black text-amber-400 print:text-black">100 Points</span>
+              </div>
+              <div className="flex items-center justify-between pb-1.5 border-b border-slate-800/60 print:border-gray-300">
+                <span className="text-slate-400">Skips Allowed:</span>
+                <span className="font-bold text-rose-400 print:text-black">Max 3 Skips (-5 pts penalty)</span>
+              </div>
+              <div className="flex items-center justify-between pb-1.5 border-b border-slate-800/60 print:border-gray-300">
+                <span className="text-slate-400">Remaining Skips:</span>
+                <span className="font-mono font-bold text-amber-300 print:text-black">
+                  {paperData.remainingSkips !== undefined ? `${paperData.remainingSkips} / 3 Skips Left` : '3 / 3 Available'}
+                </span>
+              </div>
               <div className="flex items-center justify-between pb-1.5 border-b border-slate-800/60 print:border-gray-300">
                 <span className="text-slate-400">Target Language:</span>
                 <span className="font-mono font-bold text-white print:text-black">Kotlin 2.0 (JVM 21)</span>
@@ -495,21 +520,26 @@ export function QuestionPaperPreview({
 
       {/* STICKY BOTTOM ACTION BAR (Hidden in print and modal) */}
       {!readOnlyModal && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 backdrop-blur-md border-t border-slate-800 p-4 shadow-2xl print:hidden">
+        <div
+          className={`fixed bottom-0 right-0 z-40 bg-slate-950/95 backdrop-blur-md border-t border-slate-800 py-3.5 px-4 sm:px-6 lg:px-8 shadow-2xl print:hidden transition-all duration-300 ${
+            isCollapsed ? 'left-0 lg:left-20' : 'left-0 lg:left-72'
+          }`}
+        >
           <div className="max-w-[1200px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
               <button
                 onClick={onBackToContests}
-                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold border border-slate-700 transition-colors cursor-pointer"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold border border-slate-700 transition-colors cursor-pointer shrink-0 shadow-sm"
               >
-                Back to Contests
+                <ArrowLeft className="w-3.5 h-3.5 text-slate-400" />
+                <span>Back to Contests</span>
               </button>
-              <div className="text-xs text-slate-400 hidden md:block">
-                <span>Total Questions: <b className="text-white">{totalQuestions}</b></span>
-                <span className="mx-2">•</span>
-                <span>Max Points: <b className="text-amber-400">{totalMarks}</b></span>
-                <span className="mx-2">•</span>
-                <span>Duration: <b className="text-blue-400">{contest.durationMinutes} min</b></span>
+              <div className="text-xs text-slate-400 hidden sm:flex items-center gap-2 bg-slate-900/80 px-3.5 py-2 rounded-xl border border-slate-800/80">
+                <span>Total Questions: <b className="text-white font-mono">{totalQuestions}</b></span>
+                <span className="text-slate-600">•</span>
+                <span>Max Points: <b className="text-amber-400 font-mono">{totalMarks}</b></span>
+                <span className="text-slate-600">•</span>
+                <span>Duration: <b className="text-blue-400 font-mono">{contest.durationMinutes} min</b></span>
               </div>
             </div>
 
@@ -517,10 +547,10 @@ export function QuestionPaperPreview({
               <Button
                 onClick={() => setShowConfirmModal(true)}
                 disabled={isStarting}
-                className="w-full sm:w-auto px-8 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-sm rounded-xl shadow-xl shadow-blue-600/30 flex items-center justify-center gap-2 cursor-pointer transition-all"
+                className="w-full sm:w-auto px-8 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-sm rounded-xl shadow-xl shadow-blue-600/30 flex items-center justify-center gap-2 cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99]"
               >
                 <Play className="w-4 h-4 fill-white" />
-                <span>Start Contest Arena</span>
+                <span>Start Contest / Start Coding</span>
               </Button>
             </div>
           </div>
@@ -570,7 +600,7 @@ export function QuestionPaperPreview({
                 }}
                 className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs rounded-xl shadow-lg shadow-blue-600/30 cursor-pointer transition-all"
               >
-                {isStarting ? 'Starting Timer...' : 'Start Contest Now'}
+                {isStarting ? 'Starting Timer...' : 'Start Contest / Start Coding'}
               </Button>
             </div>
           </div>

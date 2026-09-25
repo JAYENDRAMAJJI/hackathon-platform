@@ -725,7 +725,7 @@ export default function ContestManagement() {
               }}
               showSaveButton={true}
               title="Supervisor Directory & Permissions"
-              description="Assigned faculty supervisors will receive proctoring authority, live student telemetry, anomaly flags, and code inspection access for this contest only."
+              description="Assign faculty to monitor live telemetry, review student submissions, and receive proctoring anomaly alerts."
             />
           </div>
         </div>

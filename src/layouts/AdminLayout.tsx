@@ -181,9 +181,9 @@ export function AdminLayout() {
           label: 'User Management',
           icon: Users,
           subItems: [
-            { label: 'All Users', path: '/admin/users', icon: Users },
-            { label: 'Students', path: '/admin/students', icon: GraduationCap },
-            { label: 'Faculty', path: '/admin/faculty', icon: Briefcase },
+            { label: 'User Access', path: '/admin/users', icon: Users },
+            { label: 'Student Insights', path: '/admin/students', icon: GraduationCap },
+            { label: 'Faculty Management', path: '/admin/faculty', icon: Briefcase },
             { label: 'Pending Approvals', path: '/admin/approvals', icon: UserCheck, badgeKey: 'pendingApprovals' },
             { label: 'Rejected Users', path: '/admin/rejected-users', icon: UserX },
           ],
@@ -306,6 +306,11 @@ export function AdminLayout() {
     if (parts.length <= 1) return [{ label: 'Dashboard', path: '/admin/dashboard' }];
 
     const breadcrumbLabelMap: Record<string, string> = {
+      'users': 'User Access',
+      'students': 'Student Insights',
+      'faculty': 'Faculty Management',
+      'approvals': 'Pending Approvals',
+      'rejected-users': 'Rejected Users',
       'questions': 'Question Manager',
       'test-cases': 'Test Validator',
       'live-sessions': 'Live Monitor',

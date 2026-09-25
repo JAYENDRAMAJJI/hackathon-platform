@@ -397,7 +397,7 @@ export const DashboardLayout = () => {
 
         {/* Page Content Container */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-slate-900 text-slate-100 print:p-0 print:overflow-visible print:h-auto print:bg-white print:text-slate-900">
-          <Outlet />
+          <Outlet context={{ collapsed }} />
         </main>
       </div>
 

@@ -164,10 +164,12 @@ const generateInitialData = () => {
 
     const currentDiff = Math.min(10, Math.max(1, Math.floor(10 - (i / 8)) + (i % 3)));
     const highestDiff = Math.min(10, currentDiff + (i % 2));
-    const solved = Math.max(0, Math.floor((72 - i) / 6));
-    const skipped = (i % 4 === 0) ? 2 : (i % 2 === 0 ? 1 : 0);
-    const attempts = solved * 2 + (i % 3);
-    const score = solved * 40 + (highestDiff * 15) - (skipped * 5);
+    const solved = Math.min(5, Math.max(0, Math.floor((72 - i) / 14)));
+    const skipped = (i % 5 === 0) ? 2 : (i % 3 === 0 ? 1 : 0);
+    const attempts = solved * 2 + (i % 2);
+    // Max achievable contest score is strictly 100 points
+    const rawScore = solved * 20 + Math.min(10, highestDiff) * 2 - (skipped * 5);
+    const score = Math.max(0, Math.min(100, rawScore));
 
     users.push({
       id: `usr_stu_${i}`,
@@ -3544,7 +3546,13 @@ export function handleMockFallback(method: string, endpoint: string, body?: any,
     }
 
     if (method === 'PUT') {
+      const permanentCode = contest.code;
+      const permanentAccessCode = contest.accessCode;
       Object.assign(contest, body);
+      if (permanentCode) {
+        contest.code = permanentCode;
+        contest.accessCode = permanentAccessCode || permanentCode;
+      }
       if (Array.isArray(body?.assignedFacultyIds)) {
         contest.assignedFacultyIds = body.assignedFacultyIds;
         contest.assignedFaculty = mockUsers

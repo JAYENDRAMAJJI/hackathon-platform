@@ -27,6 +27,8 @@ import {
   Radio,
   FileText,
   Calendar,
+  GraduationCap,
+  Briefcase,
 } from 'lucide-react';
 import { apiClient } from '../lib/api';
 
@@ -162,14 +164,14 @@ const TYPE_CONFIG: Record<
 };
 
 const QUICK_ACTIONS = [
-  { label: 'Live Monitor', path: '/admin/live-sessions', icon: Activity, desc: 'Real-time telemetry & active participant sessions', color: 'text-amber-400' },
+  { label: 'User Access', path: '/admin/users', icon: Users, desc: 'Manage user accounts, roles, permissions, approvals, and active sessions', color: 'text-blue-400' },
+  { label: 'Student Insights', path: '/admin/students', icon: GraduationCap, desc: 'Monitor student performance, attempts, progress, and session activity', color: 'text-cyan-400' },
+  { label: 'Faculty Management', path: '/admin/faculty', icon: Briefcase, desc: 'Manage faculty mentors, student batches, and supervisory activities', color: 'text-purple-400' },
+  { label: 'Pending Approvals', path: '/admin/approvals', icon: UserCheck, desc: 'Review and approve student/faculty registrations and access requests', color: 'text-amber-400' },
+  { label: 'Live Monitor', path: '/admin/live-sessions', icon: Activity, desc: 'Real-time telemetry & active participant sessions', color: 'text-emerald-400' },
   { label: 'Contest Rankings', path: '/admin/leaderboard', icon: Trophy, desc: 'Live rankings, dynamic points & solve counts', color: 'text-yellow-400' },
-  { label: 'Question Manager', path: '/admin/questions', icon: FileCode, desc: 'Question repository, difficulty levels & starter templates', color: 'text-emerald-400' },
-  { label: 'Test Validator', path: '/admin/test-cases', icon: CheckSquare, desc: 'Visible sample cases and hidden sandbox evaluation suites', color: 'text-purple-400' },
-  { label: 'Submission Tracker', path: '/admin/submissions', icon: FileCode, desc: 'Real-time code submissions log and execution verdicts', color: 'text-indigo-400' },
-  { label: 'Security & Anomalies', path: '/admin/anomalies', icon: AlertTriangle, desc: 'Instant solve alerts & suspicious tab activity', color: 'text-rose-400' },
-  { label: 'Reports Hub', path: '/admin/reports', icon: BarChart2, desc: 'Export student performance & submission metrics', color: 'text-indigo-400' },
-  { label: 'Platform Settings', path: '/admin/settings', icon: Settings, desc: 'Scoring weights, sandbox rules & OAuth security', color: 'text-blue-400' },
+  { label: 'Question Manager', path: '/admin/questions', icon: FileCode, desc: 'Question repository, difficulty levels & starter templates', color: 'text-rose-400' },
+  { label: 'Platform Settings', path: '/admin/settings', icon: Settings, desc: 'Scoring weights, sandbox rules & OAuth security', color: 'text-indigo-400' },
 ];
 
 export function GlobalSearchModal({ isOpen, onClose }: GlobalSearchModalProps) {

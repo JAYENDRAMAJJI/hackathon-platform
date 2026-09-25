@@ -159,10 +159,11 @@ const generateSeedUsers = () => {
 
     const currentDiff = Math.min(10, Math.max(1, Math.floor(10 - (i / 8)) + (i % 3)));
     const highestDiff = Math.min(10, currentDiff + (i % 2));
-    const solved = Math.max(0, Math.floor((72 - i) / 6));
-    const skipped = (i % 4 === 0) ? 2 : (i % 2 === 0 ? 1 : 0);
+    const solved = Math.min(5, Math.max(0, 5 - Math.floor(i / 15)));
+    const skipped = (i % 7 === 0) ? 2 : (i % 3 === 0 ? 1 : 0);
     const attempts = solved * 2 + (i % 3);
-    const score = solved * 40 + (highestDiff * 15) - (skipped * 5);
+    const rawScore = solved === 5 ? 100 : (solved * 18 + 10);
+    const score = Math.max(0, Math.min(100, rawScore - ((attempts > solved ? (attempts - solved) : 0) * 2) - (skipped * 5)));
 
     users.push({
       id: `usr_stu_${i}`,
@@ -213,8 +214,10 @@ const generateSeedContests = () => [
     isPublished: true,
     difficultyRange: [1, 10],
     questionCount: 5,
+    maxPoints: 100,
+    maxSkips: 3,
     questionIds: ['q_1', 'q_2', 'q_3', 'q_4', 'q_5'],
-    questionMarks: { q_1: 20, q_2: 25, q_3: 35, q_4: 40, q_5: 45 },
+    questionMarks: { q_1: 10, q_2: 15, q_3: 20, q_4: 25, q_5: 30 },
     instructions: [
       'Carefully review all problems, constraints, and scoring rubrics before starting your contest timer.',
       'Your authoritative contest countdown begins only when you confirm "Start Contest".',
@@ -228,8 +231,8 @@ const generateSeedContests = () => [
     kotlinOnly: true,
     scoringConfig: {
       difficultyWeights: {
-        1: 10, 2: 20, 3: 35, 4: 55, 5: 80,
-        6: 110, 7: 150, 8: 200, 9: 260, 10: 330
+        1: 10, 2: 15, 3: 20, 4: 25, 5: 30,
+        6: 35, 7: 40, 8: 45, 9: 50, 10: 55
       },
       attemptPenalty: 2,
       skipImpact: 5,
@@ -248,6 +251,7 @@ const generateSeedContests = () => [
       maxCodeSizeKb: 10,
       networkDisabled: true,
       readOnlyFs: true,
+      disciplineMode: true,
     },
     createdBy: 'Admin Director',
     createdAt: '2026-08-01T10:00:00Z',
@@ -270,24 +274,27 @@ const generateSeedContests = () => [
     code: 'SPRINT25',
     accessCode: 'SPRINT25',
     date: '2026-09-25',
-    startTime: '2026-09-25T14:00:00Z',
-    endTime: '2026-09-25T16:00:00Z',
-    durationMinutes: 120,
+    startTime: new Date(Date.now() - 1800000).toISOString(),
+    endTime: new Date(Date.now() + 5400000).toISOString(),
+    durationMinutes: 90,
     maxParticipants: 150,
-    status: 'SCHEDULED',
+    status: 'ACTIVE',
     isPublished: true,
     difficultyRange: [1, 6],
     questionCount: 3,
+    maxPoints: 100,
+    maxSkips: 3,
     questionIds: ['q_1', 'q_2', 'q_3'],
+    questionMarks: { q_1: 25, q_2: 35, q_3: 40 },
     kotlinOnly: true,
     scoringConfig: {
-      difficultyWeights: { 1: 10, 2: 20, 3: 30, 4: 45, 5: 60, 6: 80 },
+      difficultyWeights: { 1: 25, 2: 35, 3: 40, 4: 45, 5: 50, 6: 55 },
       attemptPenalty: 1,
-      skipImpact: 2,
+      skipImpact: 5,
       tieBreaker: 'TOTAL_TIME_ASC',
     },
     attemptRules: 'Unlimited attempts with 1 point penalty per failed attempt.',
-    skipRules: 'Unlimited skips.',
+    skipRules: 'Max 3 problem skips allowed during active session. Skipped problems deduct 5 points.',
     leaderboardVisible: true,
     autoStart: true,
     autoEnd: true,
@@ -311,8 +318,8 @@ const generateSeedContests = () => [
         department: 'Information Technology',
       },
     ],
-    participantIds: [],
-    participantsCount: 45,
+    participantIds: Array.from({ length: 71 }, (_, i) => `usr_stu_${i + 1}`),
+    participantsCount: 71,
   },
   {
     id: 'contest_3',
@@ -329,16 +336,19 @@ const generateSeedContests = () => [
     isPublished: false,
     difficultyRange: [6, 10],
     questionCount: 2,
+    maxPoints: 100,
+    maxSkips: 3,
     questionIds: ['q_4', 'q_5'],
+    questionMarks: { q_4: 45, q_5: 55 },
     kotlinOnly: true,
     scoringConfig: {
-      difficultyWeights: { 6: 100, 7: 150, 8: 220, 9: 300, 10: 400 },
-      attemptPenalty: 5,
-      skipImpact: 10,
+      difficultyWeights: { 6: 45, 7: 50, 8: 55, 9: 60, 10: 65 },
+      attemptPenalty: 2,
+      skipImpact: 5,
       tieBreaker: 'LEAST_ATTEMPTS',
     },
     attemptRules: 'Strict 5 attempt limit per question.',
-    skipRules: '1 skip allowed.',
+    skipRules: 'Max 3 problem skips allowed during active session. Skipped problems deduct 5 points.',
     leaderboardVisible: true,
     autoStart: false,
     autoEnd: true,
@@ -384,17 +394,21 @@ const generateSeedContests = () => [
     maxParticipants: 80,
     status: 'ENDED',
     isPublished: true,
-    difficultyRange: [1, 10],
-    questionCount: 25,
+    difficultyRange: [1, 8],
+    questionCount: 4,
+    maxPoints: 100,
+    maxSkips: 3,
+    questionIds: ['q_1', 'q_2', 'q_3', 'q_4'],
+    questionMarks: { q_1: 15, q_2: 25, q_3: 30, q_4: 30 },
     kotlinOnly: true,
     scoringConfig: {
-      difficultyWeights: { 1: 10, 2: 20, 3: 35, 4: 55, 5: 80, 6: 110, 7: 150, 8: 200, 9: 260, 10: 330 },
+      difficultyWeights: { 1: 15, 2: 20, 3: 25, 4: 30, 5: 35, 6: 40, 7: 45, 8: 50 },
       attemptPenalty: 2,
       skipImpact: 5,
       tieBreaker: 'TOTAL_TIME_ASC',
     },
-    attemptRules: 'Standard',
-    skipRules: 'Standard',
+    attemptRules: 'Standard contest attempt rules (penalty -2 pts per failed attempt).',
+    skipRules: 'Max 3 problem skips allowed during active session. Skipped problems deduct 5 points.',
     leaderboardVisible: true,
     autoStart: true,
     autoEnd: true,
@@ -2733,10 +2747,21 @@ app.post('/api/admin/contests', authenticateAdmin, (req, res) => {
     difficultyRange: contestData.difficultyRange || [1, 10],
     questionIds: Array.isArray(contestData.questionIds) && contestData.questionIds.length > 0 ? contestData.questionIds : ['q_1', 'q_2', 'q_3', 'q_4', 'q_5'],
     questionCount: Array.isArray(contestData.questionIds) && contestData.questionIds.length > 0 ? contestData.questionIds.length : (Number(contestData.questionCount) || 5),
+    maxPoints: Number(contestData.maxPoints) || 100,
+    maxSkips: Number(contestData.maxSkips) || 3,
+    questionMarks: contestData.questionMarks || {},
+    instructions: contestData.instructions || [
+      'Carefully review all problems, constraints, and scoring rubrics before starting your contest timer.',
+      'Your authoritative contest countdown begins only when you confirm "Start Contest".',
+      'You can freely navigate between all assigned questions using the question selector panel in any order.',
+      'Use "Run Code" to test your implementation against visible test fixtures.',
+      'Use "Submit Solution" for automated grading against visible and confidential test suites.',
+      'All code is executed in an isolated secure sandbox (256MB RAM / 5.0s CPU limit).'
+    ],
     kotlinOnly: true,
     scoringConfig: contestData.scoringConfig || db.settings.scoring,
     attemptRules: contestData.attemptRules || 'Standard contest submission rules',
-    skipRules: contestData.skipRules || 'Max 3 skips allowed',
+    skipRules: contestData.skipRules || 'Max 3 problem skips allowed during active session. Skipped problems deduct 5 points.',
     leaderboardVisible: contestData.leaderboardVisible !== false,
     autoStart: contestData.autoStart !== false,
     autoEnd: contestData.autoEnd !== false,
@@ -2751,7 +2776,7 @@ app.post('/api/admin/contests', authenticateAdmin, (req, res) => {
     participantsCount: 0,
   };
 
-  db.contests.push(newContest);
+  db.contests.push(newContest as any);
   logAudit(admin.id, admin.name, admin.role, 'CONTEST_CREATED', `Created contest: ${newContest.name} (Code: ${newContest.code}, Status: ${newContest.status})`);
 
   res.status(201).json({ success: true, message: 'Contest created successfully', data: newContest });
@@ -2764,7 +2789,20 @@ app.put('/api/admin/contests/:id', authenticateAdmin, (req, res) => {
 
   const updates = { ...req.body };
 
-  if (updates.code || updates.accessCode) {
+  // Contest Code is strictly permanent and immutable once generated.
+  // The system prohibits regenerating, modifying, replacing, or deleting an existing contest code.
+  if (contest.code) {
+    const incomingCode = String(updates.code || updates.accessCode || '').trim().toUpperCase();
+    if (incomingCode && incomingCode !== contest.code.toUpperCase()) {
+      return res.status(400).json({
+        success: false,
+        message: `Contest Code is permanent and cannot be modified or replaced. The permanent code '${contest.code}' remains unchanged.`,
+      });
+    }
+    // Delete any attempts to overwrite code/accessCode
+    delete updates.code;
+    delete updates.accessCode;
+  } else if (updates.code || updates.accessCode) {
     const rawCode = String(updates.code || updates.accessCode).trim().toUpperCase();
     const duplicateCode = db.contests.find((c) => c.id !== contest.id && c.code && c.code.toUpperCase() === rawCode);
     if (duplicateCode) {
@@ -2775,6 +2813,10 @@ app.put('/api/admin/contests/:id', authenticateAdmin, (req, res) => {
     delete updates.code;
     delete updates.accessCode;
   }
+
+  // Preserve permanent code across any update payload
+  const permanentCode = contest.code;
+  const permanentAccessCode = contest.accessCode;
 
   if (updates.assignedFacultyIds !== undefined) {
     const facultyIds: string[] = Array.isArray(updates.assignedFacultyIds) ? updates.assignedFacultyIds : [];
@@ -2793,6 +2835,10 @@ app.put('/api/admin/contests/:id', authenticateAdmin, (req, res) => {
   }
 
   Object.assign(contest, updates);
+
+  // Guarantee permanent code remains unchanged after Object.assign
+  contest.code = permanentCode;
+  contest.accessCode = permanentAccessCode || permanentCode;
 
   if (Array.isArray(contest.questionIds)) {
     contest.questionCount = contest.questionIds.length;
@@ -3575,6 +3621,35 @@ const getLeaderboardFilterMeta = (userRole?: string, userId?: string) => {
   return { contexts, contests };
 };
 
+// Helper: Calculate question marks calibrated strictly so contest total is 100 max points
+const getQuestionMarks = (q: any, contest?: any, allQuestions?: any[]): number => {
+  if (contest?.questionMarks && contest.questionMarks[q?.id] !== undefined) {
+    return Number(contest.questionMarks[q.id]);
+  }
+  // If questions list is provided, distribute 100 points proportionally
+  if (allQuestions && allQuestions.length > 0) {
+    const totalDiff = allQuestions.reduce((acc, curr) => acc + (curr?.difficulty || 1), 0);
+    if (totalDiff > 0) {
+      const qIndex = allQuestions.findIndex((x) => x?.id === q?.id);
+      let calculatedPoints = Math.round(((q?.difficulty || 1) / totalDiff) * 100);
+      // For the last question, adjust so total sum is exactly 100
+      if (qIndex === allQuestions.length - 1) {
+        let otherSum = 0;
+        for (let i = 0; i < allQuestions.length - 1; i++) {
+          otherSum += Math.round(((allQuestions[i]?.difficulty || 1) / totalDiff) * 100);
+        }
+        calculatedPoints = Math.max(1, 100 - otherSum);
+      }
+      return calculatedPoints;
+    }
+  }
+  const weights = contest?.scoringConfig?.difficultyWeights;
+  if (weights && weights[q?.difficulty] !== undefined) {
+    return weights[q.difficulty];
+  }
+  return 20;
+};
+
 // Universal Context-Based Filtered Leaderboard Engine
 const getFilteredLeaderboardStandings = (params: {
   contextId?: string;
@@ -3653,11 +3728,11 @@ const getFilteredLeaderboardStandings = (params: {
       let score = 0;
       if (contestQuestions.length > 0) {
         contestQuestions.slice(0, solvedCount).forEach((q) => {
-          score += (contestWeights[q.difficulty] || (q.difficulty * 20));
+          score += getQuestionMarks(q, contest, contestQuestions);
         });
-        score = Math.max(0, score - (attemptsCount * cAttemptPenalty) - (skippedCount * cSkipPenalty));
+        score = Math.max(0, Math.min(100, score - (attemptsCount * cAttemptPenalty) - (skippedCount * cSkipPenalty)));
       } else {
-        score = s.score || 0;
+        score = Math.min(100, Math.max(0, s.score || 0));
       }
 
       const avgTime = Number((3.5 + (idx % 5) * 1.5 + (10 - highestDiff) * 0.4).toFixed(1));
@@ -3703,7 +3778,7 @@ const getFilteredLeaderboardStandings = (params: {
         email: s.email,
         studentEmail: s.email,
         department: s.department || 'Computer Science & Engineering',
-        score: s.score || 0,
+        score: Math.min(100, Math.max(0, s.score || 0)),
         solved: s.solvedCount || 0,
         solvedCount: s.solvedCount || 0,
         attempts: s.attemptsCount || 0,
@@ -6043,6 +6118,21 @@ app.post('/api/student/contests/join', authenticateStudent, (req, res) => {
     });
   }
 
+  // Enforce ONE ACTIVE contest per student rule
+  const activeContestInfo = getStudentActiveContestSession(student.id);
+  if (activeContestInfo && activeContestInfo.contest.id !== contest.id) {
+    return res.status(409).json({
+      success: false,
+      code: 'ACTIVE_CONTEST_EXISTS',
+      message: `You already have an active contest ("${activeContestInfo.contest.name}"). You cannot join or enter another contest until your current contest is completed or ended.`,
+      data: {
+        activeContestId: activeContestInfo.contest.id,
+        activeContestName: activeContestInfo.contest.name,
+        timeRemainingSeconds: activeContestInfo.remainingSeconds,
+      },
+    });
+  }
+
   // Reject unpublished or draft
   if (contest.status === 'DRAFT' || contest.isPublished === false) {
     return res.status(400).json({
@@ -6093,8 +6183,38 @@ app.post('/api/student/contests/join', authenticateStudent, (req, res) => {
   }
 
   // Register student
-  contest.participantIds.push(student.id);
+  if (!contest.participantIds.includes(student.id)) {
+    contest.participantIds.push(student.id);
+  }
   contest.participantsCount = contest.participantIds.length;
+
+  // Initialize session in NOT_STARTED state so the student must review instructions first
+  let session = db.sessions.find((s) => s.studentId === student.id && s.contestId === contest.id);
+  if (!session) {
+    session = {
+      id: `sess_${student.id}_${contest.id}`,
+      studentId: student.id,
+      studentName: student.name,
+      studentEmail: student.email,
+      contestId: contest.id,
+      currentQuestionId: contest.questionIds?.[0] || 'q_1',
+      currentQuestionTitle: 'Contest Challenge',
+      currentDifficulty: contest.difficultyRange?.[0] || 1,
+      score: 0,
+      solvedCount: 0,
+      skippedCount: 0,
+      attemptsCount: 0,
+      durationMinutes: contest.durationMinutes || 120,
+      startedAt: null,
+      timeRemainingSeconds: (contest.durationMinutes || 120) * 60,
+      sessionStatus: 'NOT_STARTED',
+      assignedQuestionIds: contest.questionIds || ['q_1', 'q_2', 'q_3'],
+      questionAnswers: {},
+      lastActivity: new Date().toISOString(),
+      anomalyStatus: 'NONE',
+    };
+    db.sessions.push(session);
+  }
 
   logAudit(
     student.id,
@@ -6122,9 +6242,11 @@ app.post('/api/student/contests/join', authenticateStudent, (req, res) => {
 // 1. Student Dashboard Dynamic Metrics
 app.get('/api/student/dashboard', authenticateStudent, (req, res) => {
   const student = (req as any).user;
+  const activeContestInfo = getStudentActiveContestSession(student.id);
   
-  // Prefer active contest that student has joined, or any active contest, or first contest
+  // Prefer student's actively ongoing contest, then active joined contest, or first contest
   const contest =
+    activeContestInfo?.contest ||
     db.contests.find((c) => c.status === 'ACTIVE' && Array.isArray(c.participantIds) && c.participantIds.includes(student.id)) ||
     db.contests.find((c) => c.status === 'ACTIVE') ||
     db.contests.find((c) => Array.isArray(c.participantIds) && c.participantIds.includes(student.id)) ||
@@ -6141,33 +6263,57 @@ app.get('/api/student/dashboard', authenticateStudent, (req, res) => {
   const rank = allStudents.findIndex((u) => u.id === student.id) + 1 || student.rank || 1;
   student.rank = rank;
 
-  // Compute time remaining
+  // Compute time remaining for contest
   let timeRemainingSeconds = 0;
-  if (contest && contest.status === 'ACTIVE') {
+  if (activeContestInfo) {
+    timeRemainingSeconds = activeContestInfo.remainingSeconds;
+  } else if (contest && contest.status === 'ACTIVE') {
     const end = new Date(contest.endTime).getTime();
     timeRemainingSeconds = Math.max(0, Math.floor((end - Date.now()) / 1000));
   }
 
   const publishedContests = db.contests
     .filter((c) => c.status !== 'DRAFT' && c.isPublished !== false)
-    .map((c) => ({
-      id: c.id,
-      name: c.name,
-      description: c.description,
-      status: c.status,
-      date: c.date,
-      startTime: c.startTime,
-      endTime: c.endTime,
-      durationMinutes: c.durationMinutes,
-      difficultyRange: c.difficultyRange,
-      questionCount: Array.isArray(c.questionIds) ? c.questionIds.length : (c.questionCount || 0),
-      isJoined: Array.isArray(c.participantIds) && c.participantIds.includes(student.id),
-      participantsCount: Array.isArray(c.participantIds) ? c.participantIds.length : (c.participantsCount || 0),
-    }));
+    .map((c) => {
+      const studentSession = db.sessions.find(
+        (s) => s.studentId === student.id && (s.contestId === c.id || (!s.contestId && c.id === 'contest_1'))
+      );
+      const isThisActive = activeContestInfo?.contest.id === c.id;
+      const isAnotherActive = !!activeContestInfo && activeContestInfo.contest.id !== c.id;
+
+      return {
+        id: c.id,
+        name: c.name,
+        description: c.description,
+        status: c.status,
+        date: c.date,
+        startTime: c.startTime,
+        endTime: c.endTime,
+        durationMinutes: c.durationMinutes,
+        difficultyRange: c.difficultyRange,
+        questionCount: Array.isArray(c.questionIds) ? c.questionIds.length : (c.questionCount || 0),
+        isJoined: Array.isArray(c.participantIds) && c.participantIds.includes(student.id),
+        participantsCount: Array.isArray(c.participantIds) ? c.participantIds.length : (c.participantsCount || 0),
+        sessionStatus: studentSession?.sessionStatus || 'NOT_STARTED',
+        isThisActive,
+        isAnotherActive,
+      };
+    });
 
   res.json({
     success: true,
     data: {
+      hasActiveContest: !!activeContestInfo,
+      activeContest: activeContestInfo
+        ? {
+            id: activeContestInfo.contest.id,
+            name: activeContestInfo.contest.name,
+            code: activeContestInfo.contest.code,
+            sessionId: activeContestInfo.session.id,
+            startedAt: activeContestInfo.session.startedAt,
+            timeRemainingSeconds: activeContestInfo.remainingSeconds,
+          }
+        : null,
       contest: contest
         ? {
             id: contest.id,
@@ -6191,7 +6337,7 @@ app.get('/api/student/dashboard', authenticateStudent, (req, res) => {
         currentDifficulty: student.currentDifficulty || 1,
         highestDifficulty: student.highestDifficulty || 1,
         rank,
-        sessionStatus: student.sessionStatus || 'ACTIVE',
+        sessionStatus: activeContestInfo ? 'ACTIVE' : (student.sessionStatus || 'NOT_STARTED'),
         department: student.department,
       },
       recentSubmissions: recentSubs.map((s) => ({
@@ -6207,6 +6353,38 @@ app.get('/api/student/dashboard', authenticateStudent, (req, res) => {
       assignedFaculty: {
         id: student.assignedFacultyId || 'usr_fac_1',
         name: student.assignedFacultyName || 'Dr. Robert Vance',
+      },
+    },
+  });
+});
+
+// Active Contest Query API (Enforces single active contest rule)
+app.get('/api/student/active-contest', authenticateStudent, (req, res) => {
+  const student = (req as any).user;
+  const activeInfo = getStudentActiveContestSession(student.id);
+
+  if (!activeInfo) {
+    return res.json({
+      success: true,
+      data: {
+        hasActiveContest: false,
+        activeContest: null,
+      },
+    });
+  }
+
+  return res.json({
+    success: true,
+    data: {
+      hasActiveContest: true,
+      activeContest: {
+        id: activeInfo.contest.id,
+        name: activeInfo.contest.name,
+        code: activeInfo.contest.code,
+        durationMinutes: activeInfo.contest.durationMinutes,
+        sessionId: activeInfo.session.id,
+        startedAt: activeInfo.session.startedAt,
+        timeRemainingSeconds: activeInfo.remainingSeconds,
       },
     },
   });
@@ -6228,20 +6406,8 @@ const DEFAULT_CONTEST_INSTRUCTIONS = [
   'Ensure you submit your solutions or finish the contest before the authoritative contest timer expires.'
 ];
 
-// Helper: Calculate question marks from custom marks or scoring weights
-const getQuestionMarks = (q: any, contest: any): number => {
-  if (contest?.questionMarks && contest.questionMarks[q.id] !== undefined) {
-    return Number(contest.questionMarks[q.id]);
-  }
-  const weights = contest?.scoringConfig?.difficultyWeights || {
-    1: 10, 2: 20, 3: 35, 4: 55, 5: 80,
-    6: 110, 7: 150, 8: 200, 9: 260, 10: 330
-  };
-  return weights[q.difficulty] || q.difficulty * 20;
-};
-
 // Helper: Calculate authoritative remaining time in seconds based on backend start time and contest end
-const calculateAuthoritativeRemainingSeconds = (session: any, contest: any): number => {
+function calculateAuthoritativeRemainingSeconds(session: any, contest: any): number {
   if (!session || !session.startedAt || session.sessionStatus === 'NOT_STARTED') {
     return (contest?.durationMinutes || 120) * 60;
   }
@@ -6256,11 +6422,46 @@ const calculateAuthoritativeRemainingSeconds = (session: any, contest: any): num
   const now = Date.now();
   const remaining = Math.max(0, Math.floor((effectiveDeadline - now) / 1000));
   return remaining;
-};
+}
+
+// Helper: Authoritatively determine if student currently has an ACTIVE contest session
+function getStudentActiveContestSession(studentId: string): { session: any; contest: any; remainingSeconds: number } | null {
+  const studentSessions = db.sessions.filter(
+    (s) => s.studentId === studentId && s.sessionStatus === 'ACTIVE'
+  );
+
+  for (const session of studentSessions) {
+    if (!session.startedAt) continue;
+    const contestId = session.contestId || 'contest_1';
+    const contest = db.contests.find((c) => c.id === contestId);
+
+    if (!contest || contest.status === 'ENDED' || contest.status === 'CANCELLED') {
+      session.sessionStatus = 'EXPIRED';
+      continue;
+    }
+
+    const remaining = calculateAuthoritativeRemainingSeconds(session, contest);
+    if (remaining <= 0) {
+      session.sessionStatus = 'EXPIRED';
+      continue;
+    }
+
+    return { session, contest, remainingSeconds: remaining };
+  }
+
+  return null;
+}
 
 // Helper: Sanitize question for student view (STRICTLY NO HIDDEN TEST CASES OR SECRETS)
-const sanitizeQuestionForStudent = (q: any, index: number, contest: any, status: 'SOLVED' | 'ATTEMPTED' | 'UNANSWERED' = 'UNANSWERED', savedCode: string = '') => {
-  const marks = getQuestionMarks(q, contest);
+const sanitizeQuestionForStudent = (
+  q: any,
+  index: number,
+  contest: any,
+  status: 'SOLVED' | 'ATTEMPTED' | 'UNANSWERED' = 'UNANSWERED',
+  savedCode: string = '',
+  allQuestions?: any[]
+) => {
+  const marks = getQuestionMarks(q, contest, allQuestions);
   const visibleTests = db.testCases
     .filter((tc) => tc.questionId === q.id && !tc.isHidden && tc.isEnabled)
     .map((tc, idx) => ({
@@ -6316,9 +6517,25 @@ app.get('/api/student/contest/paper', authenticateStudent, (req, res) => {
   const student = (req as any).user;
   const requestedContestId = req.query.contestId as string | undefined;
 
+  // Single active contest rule enforcement
+  const activeContestInfo = getStudentActiveContestSession(student.id);
+  if (requestedContestId && activeContestInfo && activeContestInfo.contest.id !== requestedContestId) {
+    return res.status(409).json({
+      success: false,
+      code: 'ACTIVE_CONTEST_EXISTS',
+      message: `You already have an active contest ("${activeContestInfo.contest.name}"). You cannot view, start, or enter another contest until your current contest is completed or ended.`,
+      data: {
+        activeContestId: activeContestInfo.contest.id,
+        activeContestName: activeContestInfo.contest.name,
+        timeRemainingSeconds: activeContestInfo.remainingSeconds,
+      },
+    });
+  }
+
   let contest = requestedContestId
     ? db.contests.find((c) => c.id === requestedContestId)
-    : (db.contests.find((c) => c.status === 'ACTIVE' && Array.isArray(c.participantIds) && c.participantIds.includes(student.id)) ||
+    : (activeContestInfo?.contest ||
+       db.contests.find((c) => c.status === 'ACTIVE' && Array.isArray(c.participantIds) && c.participantIds.includes(student.id)) ||
        db.contests.find((c) => Array.isArray(c.participantIds) && c.participantIds.includes(student.id)) ||
        db.contests.find((c) => c.status === 'ACTIVE') ||
        db.contests[0]);
@@ -6378,17 +6595,21 @@ app.get('/api/student/contest/paper', authenticateStudent, (req, res) => {
   // If questions empty, fallback to available questions
   const finalQuestions = questionsList.length > 0 ? questionsList : db.questions.slice(0, 5);
 
-  // Calculate total marks
-  const totalMarks = finalQuestions.reduce((sum: number, q: any) => sum + getQuestionMarks(q, contest), 0);
+  // Calculate total marks (strictly calibrated to 100)
+  const totalMarks = finalQuestions.reduce((sum: number, q: any) => sum + getQuestionMarks(q, contest, finalQuestions), 0);
 
-  // Sanitize questions for student (strictly visible info only)
+  // Sanitize questions for student (strictly visible info only, question marks calibrated to sum to 100)
   const sanitizedQuestions = finalQuestions.map((q: any, idx: number) => {
-    return sanitizeQuestionForStudent(q, idx, contest);
+    return sanitizeQuestionForStudent(q, idx, contest, 'UNANSWERED', '', finalQuestions);
   });
 
   const instructions = Array.isArray((contest as any).instructions) && (contest as any).instructions.length > 0
     ? (contest as any).instructions
     : (typeof (contest as any).instructions === 'string' ? [(contest as any).instructions] : DEFAULT_CONTEST_INSTRUCTIONS);
+
+  const maxSkips = contest.maxSkips || 3;
+  const currentSkippedCount = session?.skippedCount || 0;
+  const remainingSkips = Math.max(0, maxSkips - currentSkippedCount);
 
   res.json({
     success: true,
@@ -6399,11 +6620,17 @@ app.get('/api/student/contest/paper', authenticateStudent, (req, res) => {
         code: contest.code,
         description: contest.description,
         instructions,
+        maxPoints: contest.maxPoints || 100,
+        maxSkips,
+        remainingSkips,
+        skippedCount: currentSkippedCount,
         rules: {
           attemptRules: contest.attemptRules || 'Standard contest submission rules apply.',
-          skipRules: contest.skipRules || 'Problem skipping rules apply.',
+          skipRules: contest.skipRules || 'Max 3 problem skips allowed during active session. Skipped problems deduct 5 points.',
           attemptPenalty: contest.scoringConfig?.attemptPenalty || 2,
           skipImpact: contest.scoringConfig?.skipImpact || 5,
+          maxSkips,
+          remainingSkips,
         },
         durationMinutes: contest.durationMinutes || 120,
         difficultyRange: contest.difficultyRange || [1, 10],
@@ -6417,6 +6644,10 @@ app.get('/api/student/contest/paper', authenticateStudent, (req, res) => {
       questions: sanitizedQuestions,
       totalQuestions: sanitizedQuestions.length,
       totalMarks,
+      maxPoints: 100,
+      maxSkips,
+      remainingSkips,
+      skippedCount: currentSkippedCount,
       sessionState: sessionStatus,
       isStarted,
       startedAt: session?.startedAt || null,
@@ -6469,6 +6700,21 @@ app.post('/api/student/contest/start', authenticateStudent, (req, res) => {
         message: `This contest has not started yet. Official start time: ${new Date(contest.startTime).toLocaleString()}.`,
       });
     }
+  }
+
+  // Enforce ONE ACTIVE contest per student rule
+  const activeContestInfo = getStudentActiveContestSession(student.id);
+  if (activeContestInfo && activeContestInfo.contest.id !== contest.id) {
+    return res.status(409).json({
+      success: false,
+      code: 'ACTIVE_CONTEST_EXISTS',
+      message: `You already have an active contest ("${activeContestInfo.contest.name}"). You cannot start or enter another contest until your current contest is completed or ended.`,
+      data: {
+        activeContestId: activeContestInfo.contest.id,
+        activeContestName: activeContestInfo.contest.name,
+        timeRemainingSeconds: activeContestInfo.remainingSeconds,
+      },
+    });
   }
 
   // Locate existing session
@@ -6597,9 +6843,25 @@ app.get('/api/student/contest/state', authenticateStudent, (req, res) => {
   const student = (req as any).user;
   const requestedContestId = req.query.contestId as string | undefined;
 
+  // Single active contest rule enforcement
+  const activeContestInfo = getStudentActiveContestSession(student.id);
+  if (requestedContestId && activeContestInfo && activeContestInfo.contest.id !== requestedContestId) {
+    return res.status(409).json({
+      success: false,
+      code: 'ACTIVE_CONTEST_EXISTS',
+      message: `You already have an active contest ("${activeContestInfo.contest.name}"). You cannot enter another contest until your current contest is completed or ended.`,
+      data: {
+        activeContestId: activeContestInfo.contest.id,
+        activeContestName: activeContestInfo.contest.name,
+        timeRemainingSeconds: activeContestInfo.remainingSeconds,
+      },
+    });
+  }
+
   let contest = requestedContestId
     ? db.contests.find((c) => c.id === requestedContestId)
-    : (db.contests.find((c) => c.status === 'ACTIVE' && Array.isArray(c.participantIds) && c.participantIds.includes(student.id)) ||
+    : (activeContestInfo?.contest ||
+       db.contests.find((c) => c.status === 'ACTIVE' && Array.isArray(c.participantIds) && c.participantIds.includes(student.id)) ||
        db.contests.find((c) => Array.isArray(c.participantIds) && c.participantIds.includes(student.id)) ||
        db.contests.find((c) => c.status === 'ACTIVE') ||
        db.contests[0]);
@@ -6722,11 +6984,15 @@ app.get('/api/student/contest/state', authenticateStudent, (req, res) => {
     }
 
     const savedDraft = session?.questionAnswers?.[q.id]?.code || '';
-    return sanitizeQuestionForStudent(q, idx, contest, qStatus, savedDraft);
+    return sanitizeQuestionForStudent(q, idx, contest, qStatus, savedDraft, questionsObjects);
   });
 
   const activeQuestionId = req.query.questionId as string || session.currentQuestionId || questions[0]?.id;
   const activeQuestion = questions.find((q: any) => q.id === activeQuestionId) || questions[0];
+
+  const maxSkips = contest.maxSkips || 3;
+  const currentSkippedCount = session.skippedCount || student.skippedCount || 0;
+  const remainingSkips = Math.max(0, maxSkips - currentSkippedCount);
 
   res.json({
     success: true,
@@ -6742,6 +7008,10 @@ app.get('/api/student/contest/state', authenticateStudent, (req, res) => {
         timeRemainingSeconds: remainingSeconds,
         serverTime: new Date().toISOString(),
         isJoined: true,
+        maxPoints: contest.maxPoints || 100,
+        maxSkips,
+        remainingSkips,
+        skippedCount: currentSkippedCount,
       },
       sessionState: 'ACTIVE',
       isStarted: true,
@@ -6751,10 +7021,13 @@ app.get('/api/student/contest/state', authenticateStudent, (req, res) => {
       questions,
       session: {
         id: session.id,
-        score: session.score || student.score || 0,
+        score: Math.min(100, session.score || student.score || 0),
         solvedCount: session.solvedCount || student.solvedCount || 0,
         attemptsCount: session.attemptsCount || student.attemptsCount || 0,
-        skippedCount: session.skippedCount || student.skippedCount || 0,
+        skippedCount: currentSkippedCount,
+        remainingSkips,
+        maxSkips,
+        maxPoints: 100,
         currentDifficulty: activeQuestion?.difficulty || student.currentDifficulty || 1,
         highestDifficulty: student.highestDifficulty || 1,
         rank: student.rank || 1,
@@ -6771,6 +7044,20 @@ app.post('/api/student/contest/save-draft', authenticateStudent, (req, res) => {
 
   if (!questionId || code === undefined) {
     return res.status(400).json({ success: false, message: 'questionId and code are required' });
+  }
+
+  // Active contest guard
+  const activeContestInfo = getStudentActiveContestSession(student.id);
+  if (activeContestInfo && contestId && activeContestInfo.contest.id !== contestId) {
+    return res.status(409).json({
+      success: false,
+      code: 'ACTIVE_CONTEST_EXISTS',
+      message: `You already have an active contest ("${activeContestInfo.contest.name}"). You cannot modify drafts for another contest until your current contest is completed or ended.`,
+      data: {
+        activeContestId: activeContestInfo.contest.id,
+        activeContestName: activeContestInfo.contest.name,
+      },
+    });
   }
 
   const session = db.sessions.find(
@@ -6848,6 +7135,20 @@ app.post(['/api/student/run-code', '/api/student/contest/run'], authenticateStud
 
   if (!code || !code.trim()) {
     return res.status(400).json({ success: false, message: 'Please provide Kotlin solution code to execute.' });
+  }
+
+  // Active contest guard
+  const activeContestInfo = getStudentActiveContestSession(student.id);
+  if (activeContestInfo && contestId && activeContestInfo.contest.id !== contestId) {
+    return res.status(409).json({
+      success: false,
+      code: 'ACTIVE_CONTEST_EXISTS',
+      message: `You already have an active contest ("${activeContestInfo.contest.name}"). You cannot run code for another contest until your current contest is completed or ended.`,
+      data: {
+        activeContestId: activeContestInfo.contest.id,
+        activeContestName: activeContestInfo.contest.name,
+      },
+    });
   }
 
   // Security Sandbox Inspection
@@ -6933,6 +7234,20 @@ app.post(['/api/student/submit-code', '/api/student/contest/submit'], authentica
 
   if (!code || !code.trim()) {
     return res.status(400).json({ success: false, message: 'Solution code is required for submission.' });
+  }
+
+  // Active contest guard
+  const activeContestInfo = getStudentActiveContestSession(student.id);
+  if (activeContestInfo && contestId && activeContestInfo.contest.id !== contestId) {
+    return res.status(409).json({
+      success: false,
+      code: 'ACTIVE_CONTEST_EXISTS',
+      message: `You already have an active contest ("${activeContestInfo.contest.name}"). You cannot submit solutions for another contest until your current contest is completed or ended.`,
+      data: {
+        activeContestId: activeContestInfo.contest.id,
+        activeContestName: activeContestInfo.contest.name,
+      },
+    });
   }
 
   // Sandbox Security Scan
@@ -7063,14 +7378,14 @@ app.post(['/api/student/submit-code', '/api/student/contest/submit'], authentica
   const actualScoreToAdd = alreadyAccepted ? 0 : scoreAwarded;
 
   // Update Student & Session Stats
-  student.score = (student.score || 0) + actualScoreToAdd;
+  student.score = Math.min(100, (student.score || 0) + actualScoreToAdd);
   if (!alreadyAccepted) {
     student.solvedCount = (student.solvedCount || 0) + 1;
   }
   student.attemptsCount = (student.attemptsCount || 0) + 1;
 
   if (session) {
-    session.score = (session.score || 0) + actualScoreToAdd;
+    session.score = Math.min(contest?.maxPoints || 100, (session.score || 0) + actualScoreToAdd);
     if (!alreadyAccepted) {
       session.solvedCount = (session.solvedCount || 0) + 1;
     }
@@ -7126,16 +7441,56 @@ app.post(['/api/student/submit-code', '/api/student/contest/submit'], authentica
   });
 });
 
-// 8. Student Skip Question API
+// 8. Student Skip Question API (Strictly Max 3 Skips per Contest, -5 pts Deduction)
 app.post('/api/student/skip-question', authenticateStudent, (req, res) => {
   const student = (req as any).user;
-  const { questionId, reason } = req.body;
+  const { questionId, contestId, reason } = req.body;
+
+  let contest = contestId
+    ? db.contests.find((c) => c.id === contestId)
+    : (db.contests.find((c) => c.status === 'ACTIVE' && Array.isArray(c.participantIds) && c.participantIds.includes(student.id)) ||
+       db.contests[0]);
+
+  // Find active session
+  let session = db.sessions.find(
+    (s) => s.studentId === student.id && (s.contestId === contest?.id || (!s.contestId && contest?.id === 'contest_1'))
+  );
+
+  const maxSkips = contest?.maxSkips || 3;
+  const currentSkips = session?.skippedCount || student.skippedCount || 0;
+
+  if (currentSkips >= maxSkips) {
+    return res.status(400).json({
+      success: false,
+      code: 'MAX_SKIPS_EXCEEDED',
+      message: `Maximum skips (${maxSkips}) reached for this contest. You have 0 skips remaining.`,
+      data: {
+        maxSkips,
+        remainingSkips: 0,
+        skippedCount: currentSkips,
+      },
+    });
+  }
 
   const question = db.questions.find((q) => q.id === questionId) || db.questions[0];
+  const skipPenalty = contest?.scoringConfig?.skipImpact || 5;
+  const newSkippedCount = currentSkips + 1;
+  const remainingSkips = Math.max(0, maxSkips - newSkippedCount);
 
-  const skipPenalty = 5;
+  if (session) {
+    session.skippedCount = newSkippedCount;
+    session.score = Math.max(0, (session.score || 0) - skipPenalty);
+    if (!session.questionAnswers) session.questionAnswers = {};
+    if (!session.questionAnswers[question.id] || session.questionAnswers[question.id].status !== 'SOLVED') {
+      session.questionAnswers[question.id] = {
+        status: 'SKIPPED',
+        skippedAt: new Date().toISOString(),
+      };
+    }
+  }
+
   student.score = Math.max(0, (student.score || 0) - skipPenalty);
-  student.skippedCount = (student.skippedCount || 0) + 1;
+  student.skippedCount = newSkippedCount;
 
   db.activityLogs.unshift({
     id: `act_${Date.now()}`,
@@ -7143,10 +7498,10 @@ app.post('/api/student/skip-question', authenticateStudent, (req, res) => {
     studentId: student.id,
     studentName: student.name,
     action: 'QUESTION_SKIPPED' as const,
-    details: `Skipped Level ${question.difficulty} question (${question.title}) - Deduction: ${skipPenalty} pts. Reason: ${reason || 'Student request'}`,
+    details: `Skipped Question "${question.title}" (Level ${question.difficulty}) - Deduction: ${skipPenalty} pts. Skips Remaining: ${remainingSkips}/${maxSkips}. Reason: ${reason || 'Student skipped problem'}`,
     ipAddress: '127.0.0.1',
     device: 'Chrome 124.0 / Windows 11',
-    sessionId: `sess_${student.id}`,
+    sessionId: session?.id || `sess_${student.id}`,
   });
 
   const activeStudents = db.users
@@ -7154,15 +7509,20 @@ app.post('/api/student/skip-question', authenticateStudent, (req, res) => {
     .sort((a, b) => (b.score || 0) - (a.score || 0));
   activeStudents.forEach((s, idx) => { s.rank = idx + 1; });
 
-  broadcastEvent('LEADERBOARD_UPDATE', { studentId: student.id, score: student.score, rank: student.rank });
+  broadcastEvent('LEADERBOARD_UPDATE', { studentId: student.id, score: session?.score || student.score, rank: student.rank });
 
   res.json({
     success: true,
-    message: `Question skipped. ${skipPenalty} point penalty applied.`,
+    message: `Question skipped. -${skipPenalty} point deduction applied. You have ${remainingSkips} of ${maxSkips} skips remaining.`,
     data: {
-      score: student.score,
-      skippedCount: student.skippedCount,
-      currentDifficulty: student.currentDifficulty || 1,
+      score: session?.score ?? student.score,
+      newTotalScore: session?.score ?? student.score,
+      skippedCount: newSkippedCount,
+      remainingSkips,
+      maxSkips,
+      skipPenalty,
+      questionId: question.id,
+      questionStatus: 'SKIPPED',
     },
   });
 });

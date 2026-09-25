@@ -25,6 +25,7 @@ import {
   Flame,
   ChevronRight,
   TrendingUp,
+  ShieldAlert,
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { useAuthStore } from '../../store/authStore';
@@ -47,6 +48,13 @@ export default function StudentDashboard() {
   const [codeModalOpen, setCodeModalOpen] = useState(false);
   const [targetContestForJoin, setTargetContestForJoin] = useState<any | null>(null);
   const [modalCode, setModalCode] = useState('');
+
+  // Single Active Contest Restriction Modal State
+  const [blockedAttemptModal, setBlockedAttemptModal] = useState<{
+    targetContestName?: string;
+    activeContestName: string;
+    activeContestId: string;
+  } | null>(null);
 
   const fetchDashboardData = async (isManual = false) => {
     try {
@@ -82,9 +90,35 @@ export default function StudentDashboard() {
     fetchDashboardData();
   }, []);
 
+  const activeContest = dashboardData?.activeContest;
+
+  const handleSelectContest = (targetContestId: string) => {
+    if (activeContest && activeContest.id !== targetContestId) {
+      const target = availableContests.find((c) => c.id === targetContestId);
+      setBlockedAttemptModal({
+        targetContestName: target?.name || 'Another Competition',
+        activeContestName: activeContest.name,
+        activeContestId: activeContest.id,
+      });
+      toast.error(`You already have an active contest ("${activeContest.name}"). You cannot enter another contest until your current contest is completed or ended.`);
+      return;
+    }
+    navigate(`/student/contest?contestId=${targetContestId}`);
+  };
+
   const handleJoinWithCode = async (codeToJoin: string, autoEnter: boolean = true) => {
     if (!codeToJoin.trim()) {
       toast.error('Please enter a valid contest access code.');
+      return;
+    }
+
+    if (activeContest) {
+      setBlockedAttemptModal({
+        targetContestName: targetContestForJoin?.name || 'Another Competition',
+        activeContestName: activeContest.name,
+        activeContestId: activeContest.id,
+      });
+      toast.error(`You already have an active contest ("${activeContest.name}"). You cannot join another contest until your current contest is completed or ended.`);
       return;
     }
 
@@ -96,17 +130,26 @@ export default function StudentDashboard() {
 
       if (resp.success && resp.data) {
         const joinedContest = resp.data;
-        toast.success(`Successfully registered for "${joinedContest.name}"!`);
+        toast.success(`Contest access code verified! Opening "${joinedContest.name}" contest overview...`);
         setCodeModalOpen(false);
         setInputCode('');
         setModalCode('');
         await fetchDashboardData();
 
         if (autoEnter && joinedContest.id) {
-          navigate(`/student/contest?contestId=${joinedContest.id}`);
+          navigate(`/student/contest?contestId=${joinedContest.id}&preview=true`);
         }
       }
     } catch (err: any) {
+      if (err.code === 'ACTIVE_CONTEST_EXISTS' || err.status === 409) {
+        const activeName = err.data?.data?.activeContestName || activeContest?.name || 'Ongoing Competition';
+        const activeId = err.data?.data?.activeContestId || activeContest?.id || 'contest_1';
+        setBlockedAttemptModal({
+          targetContestName: targetContestForJoin?.name || 'Another Competition',
+          activeContestName: activeName,
+          activeContestId: activeId,
+        });
+      }
       toast.error(err.message || 'Invalid contest code or contest not active');
     } finally {
       setJoiningCode(false);
@@ -123,7 +166,7 @@ export default function StudentDashboard() {
     rank: 1,
   };
 
-  const contest = dashboardData?.contest || {
+  const contest = activeContest || dashboardData?.contest || {
     name: 'University Grand Hackathon 2026',
     status: 'ACTIVE',
   };
@@ -133,16 +176,22 @@ export default function StudentDashboard() {
   return (
     <div className="max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-300 pb-16 font-sans">
       {/* TOP COMMAND CENTER BANNER */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-slate-900/80 border border-slate-800 p-6 lg:p-8 rounded-2xl shadow-xl backdrop-blur-md relative overflow-hidden">
+      <div className={`flex flex-col md:flex-row md:items-center justify-between gap-6 bg-slate-900/80 border p-6 lg:p-8 rounded-2xl shadow-xl backdrop-blur-md relative overflow-hidden ${
+        activeContest ? 'border-emerald-500/40 ring-1 ring-emerald-500/20' : 'border-slate-800'
+      }`}>
         <div className="relative z-10 max-w-3xl space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span className={`h-2.5 w-2.5 rounded-full ${activeContest ? 'bg-emerald-400 animate-ping' : 'bg-emerald-500 animate-pulse'}`}></span>
             <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
-              Live Competition Engine
+              {activeContest ? 'Active Contest In Progress' : 'Live Competition Engine'}
             </span>
             <span className="text-slate-600">•</span>
-            <span className="text-xs font-bold text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-full">
-              {contest.name}
+            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+              activeContest
+                ? 'text-emerald-300 bg-emerald-500/10 border border-emerald-500/30'
+                : 'text-blue-400 bg-blue-500/10 border border-blue-500/20'
+            }`}>
+              {activeContest ? activeContest.name : contest.name}
             </span>
           </div>
 
@@ -150,16 +199,27 @@ export default function StudentDashboard() {
             Welcome, {user?.name || 'Student'}!
           </h1>
           <p className="text-slate-400 text-sm leading-relaxed max-w-2xl">
-            Your Kotlin competition sandbox is active. Solve algorithmic challenges, advance through difficulty tiers, and climb the live institutional leaderboard.
+            {activeContest
+              ? `You currently have an active contest session in "${activeContest.name}". Please resume and submit your attempt before starting another contest.`
+              : 'Your Kotlin competition sandbox is active. Solve algorithmic challenges, advance through difficulty tiers, and climb the live institutional leaderboard.'}
           </p>
 
           <div className="flex flex-wrap items-center gap-3 pt-3">
-            <button
-              onClick={() => navigate(`/student/contest${contest.id ? `?contestId=${contest.id}` : ''}`)}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-sm font-bold shadow-lg shadow-blue-600/25 transition-all cursor-pointer"
-            >
-              <Play className="w-4 h-4 fill-white" /> Enter Active Arena
-            </button>
+            {activeContest ? (
+              <button
+                onClick={() => navigate(`/student/contest?contestId=${activeContest.id}`)}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-sm font-bold shadow-lg shadow-emerald-600/30 transition-all cursor-pointer animate-pulse"
+              >
+                <Play className="w-4 h-4 fill-white" /> Resume Active Contest
+              </button>
+            ) : (
+              <button
+                onClick={() => navigate(`/student/contest${contest.id ? `?contestId=${contest.id}` : ''}`)}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-sm font-bold shadow-lg shadow-blue-600/25 transition-all cursor-pointer"
+              >
+                <Play className="w-4 h-4 fill-white" /> Enter Active Arena
+              </button>
+            )}
             <button
               onClick={() => navigate('/student/leaderboard')}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-semibold transition-all border border-slate-700 shadow-sm cursor-pointer"
@@ -261,30 +321,47 @@ export default function StudentDashboard() {
               const isActive = c.status === 'ACTIVE';
               const isScheduled = c.status === 'SCHEDULED';
               const isEnrolled = c.isJoined;
+              const isThisActive = c.isThisActive || (activeContest && activeContest.id === c.id);
 
               return (
                 <div
                   key={c.id}
                   className={`bg-slate-900 border rounded-2xl p-5 shadow-xl flex flex-col justify-between transition-all group ${
-                    isActive
+                    isThisActive
+                      ? 'border-emerald-500/60 shadow-emerald-950/20 ring-1 ring-emerald-500/30'
+                      : isActive
                       ? 'border-blue-500/40 hover:border-blue-500/70 shadow-blue-900/10'
                       : 'border-slate-800 hover:border-slate-700'
                   }`}
                 >
                   <div className="space-y-3">
                     <div className="flex items-center justify-between gap-2">
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                          isActive
-                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                            : isScheduled
-                            ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                            : 'bg-slate-800 text-slate-400 border border-slate-700'
-                        }`}
-                      >
-                        {isActive && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />}
-                        {c.status}
-                      </span>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                            isActive
+                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                              : isScheduled
+                              ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                              : 'bg-slate-800 text-slate-400 border border-slate-700'
+                          }`}
+                        >
+                          {isActive && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />}
+                          {c.status}
+                        </span>
+
+                        {isThisActive && (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-300 bg-emerald-500/20 px-2.5 py-0.5 rounded-full border border-emerald-500/40 animate-pulse">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Active Session
+                          </span>
+                        )}
+
+                        {c.sessionStatus === 'COMPLETED' && (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-purple-300 bg-purple-500/20 px-2 py-0.5 rounded-full border border-purple-500/30">
+                            Completed
+                          </span>
+                        )}
+                      </div>
 
                       {isEnrolled && (
                         <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
@@ -328,21 +405,63 @@ export default function StudentDashboard() {
 
                     {isEnrolled ? (
                       <button
-                        onClick={() => navigate(`/student/contest?contestId=${c.id}`)}
-                        className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 shadow-md shadow-blue-600/20 cursor-pointer transition-all"
+                        onClick={() => handleSelectContest(c.id)}
+                        className={`font-bold text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 shadow-md cursor-pointer transition-all ${
+                          isThisActive
+                            ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-emerald-600/25 ring-2 ring-emerald-500/50 animate-pulse'
+                            : activeContest
+                            ? 'bg-slate-800/90 hover:bg-slate-700 text-amber-300 border border-amber-500/30'
+                            : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/20'
+                        }`}
                       >
-                        <Play className="w-3.5 h-3.5 fill-white" /> Enter Arena
+                        {isThisActive ? (
+                          <>
+                            <Play className="w-3.5 h-3.5 fill-white" />
+                            Resume Active Contest
+                          </>
+                        ) : activeContest ? (
+                          <>
+                            <Lock className="w-3.5 h-3.5 text-amber-400" />
+                            Locked (Contest Active)
+                          </>
+                        ) : (
+                          <>
+                            <Play className="w-3.5 h-3.5 fill-white" />
+                            Enter Arena
+                          </>
+                        )}
                       </button>
                     ) : (
                       <button
                         onClick={() => {
+                          if (activeContest) {
+                            setBlockedAttemptModal({
+                              targetContestName: c.name,
+                              activeContestName: activeContest.name,
+                              activeContestId: activeContest.id,
+                            });
+                            toast.error(`You already have an active contest ("${activeContest.name}"). You cannot join another contest until your current contest is completed or ended.`);
+                            return;
+                          }
                           setTargetContestForJoin(c);
                           setModalCode('');
                           setCodeModalOpen(true);
                         }}
-                        className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 cursor-pointer transition-colors"
+                        className={`font-bold text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 cursor-pointer transition-colors ${
+                          activeContest
+                            ? 'bg-slate-800/60 text-slate-400 border border-slate-800 hover:bg-slate-800 hover:text-slate-300'
+                            : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
+                        }`}
                       >
-                        <KeyRound className="w-3.5 h-3.5 text-amber-400" /> Join with Code
+                        {activeContest ? (
+                          <>
+                            <Lock className="w-3.5 h-3.5 text-slate-500" /> Locked (Contest Active)
+                          </>
+                        ) : (
+                          <>
+                            <KeyRound className="w-3.5 h-3.5 text-amber-400" /> Join with Code
+                          </>
+                        )}
                       </button>
                     )}
                   </div>
@@ -390,7 +509,7 @@ export default function StudentDashboard() {
                 <Code2 className="w-4 h-4 text-blue-400" /> Recent Submissions
               </div>
               <button
-                onClick={() => navigate('/student/contest')}
+                onClick={() => navigate(activeContest ? `/student/contest?contestId=${activeContest.id}` : '/student/contest')}
                 className="text-xs text-blue-400 hover:text-blue-300 font-semibold cursor-pointer flex items-center gap-1"
               >
                 Go to Arena <ChevronRight className="w-3.5 h-3.5" />
@@ -565,6 +684,60 @@ export default function StudentDashboard() {
                 className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-lg shadow-blue-600/25 cursor-pointer disabled:opacity-50 transition-all"
               >
                 {joiningCode ? 'Verifying...' : 'Verify & Enter Arena'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SINGLE ACTIVE CONTEST RESTRICTION MODAL */}
+      {blockedAttemptModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl space-y-6 text-center animate-in zoom-in-95">
+            <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400 shadow-lg">
+              <ShieldAlert className="w-8 h-8" />
+            </div>
+
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                Tournament Policy Enforced
+              </div>
+              <h2 className="text-2xl font-black text-white tracking-tight">
+                Active Contest in Progress
+              </h2>
+              <p className="text-sm text-slate-300 leading-relaxed">
+                You are currently taking part in an active contest:{' '}
+                <span className="text-white font-extrabold">{blockedAttemptModal.activeContestName}</span>.
+              </p>
+              <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 text-left text-xs text-slate-400 space-y-2">
+                <div className="flex items-center gap-2 text-amber-400 font-semibold">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  Single Active Contest Restriction
+                </div>
+                <p>
+                  Platform rules strictly prevent entering, previewing, or starting another contest while a contest session is currently active. You must complete or end your active contest before participating in any other contest.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3 pt-2">
+              <button
+                onClick={() => {
+                  const targetId = blockedAttemptModal.activeContestId;
+                  setBlockedAttemptModal(null);
+                  navigate(`/student/contest?contestId=${targetId}`);
+                }}
+                className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-sm py-3.5 px-4 rounded-xl shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-2 cursor-pointer transition-all"
+              >
+                <Play className="w-4 h-4 fill-white" />
+                Resume Active Contest
+              </button>
+
+              <button
+                onClick={() => setBlockedAttemptModal(null)}
+                className="w-full py-2.5 text-xs text-slate-400 hover:text-white font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+              >
+                Dismiss & Stay on Dashboard
               </button>
             </div>
           </div>

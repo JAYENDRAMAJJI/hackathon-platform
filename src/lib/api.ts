@@ -3,6 +3,20 @@ import { useAuthStore } from '../store/authStore';
 
 export const API_URL = '/api';
 
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+  data?: any;
+
+  constructor(message: string, status: number, code?: string, data?: any) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+    this.data = data;
+  }
+}
+
 class AuthRequiredError extends Error {
   constructor(message = 'Authentication required. Please sign in.') {
     super(message);
@@ -99,7 +113,8 @@ export const apiClient = {
           if ((response.status >= 500 || response.status === 404) && !isProtectedEndpoint(endpoint)) {
             return handleMockFallback('GET', endpoint, undefined, params);
           }
-          throw new Error(formatErrorMessage(response.status, data));
+          const code = data?.code || data?.error;
+          throw new ApiError(formatErrorMessage(response.status, data), response.status, code, data);
         }
         return data;
       } else {
@@ -108,7 +123,7 @@ export const apiClient = {
           if (!isProtectedEndpoint(endpoint)) {
             return handleMockFallback('GET', endpoint, undefined, params);
           }
-          throw new Error(`Request failed with status ${response.status}`);
+          throw new ApiError(`Request failed with status ${response.status}`, response.status);
         }
         try {
           return JSON.parse(text);
@@ -117,10 +132,10 @@ export const apiClient = {
         }
       }
     } catch (error: any) {
-      if (error instanceof AuthRequiredError || error instanceof ForbiddenError || error?.name === 'AuthRequiredError' || error?.name === 'ForbiddenError') {
+      if (error instanceof ApiError || error?.name === 'ApiError' || error instanceof AuthRequiredError || error instanceof ForbiddenError || error?.name === 'AuthRequiredError' || error?.name === 'ForbiddenError') {
         throw error;
       }
-      if (isProtectedEndpoint(endpoint) && !token) {
+      if (isProtectedEndpoint(endpoint)) {
         throw error;
       }
       console.warn(`[apiClient] Using resilient fallback for GET ${endpoint}`, error);
@@ -169,7 +184,8 @@ export const apiClient = {
           if ((response.status >= 500 || response.status === 404) && !isProtectedEndpoint(endpoint)) {
             return handleMockFallback('POST', endpoint, data);
           }
-          throw new Error(formatErrorMessage(response.status, responseData));
+          const code = responseData?.code || responseData?.error;
+          throw new ApiError(formatErrorMessage(response.status, responseData), response.status, code, responseData);
         }
         return responseData;
       } else {
@@ -178,7 +194,7 @@ export const apiClient = {
           if (!isProtectedEndpoint(endpoint)) {
             return handleMockFallback('POST', endpoint, data);
           }
-          throw new Error(`Request failed with status ${response.status}`);
+          throw new ApiError(`Request failed with status ${response.status}`, response.status);
         }
         try {
           return JSON.parse(text);
@@ -187,10 +203,10 @@ export const apiClient = {
         }
       }
     } catch (error: any) {
-      if (error instanceof AuthRequiredError || error instanceof ForbiddenError || error?.name === 'AuthRequiredError' || error?.name === 'ForbiddenError') {
+      if (error instanceof ApiError || error?.name === 'ApiError' || error instanceof AuthRequiredError || error instanceof ForbiddenError || error?.name === 'AuthRequiredError' || error?.name === 'ForbiddenError') {
         throw error;
       }
-      if (isProtectedEndpoint(endpoint) && !token) {
+      if (isProtectedEndpoint(endpoint)) {
         throw error;
       }
       console.warn(`[apiClient] Using resilient fallback for POST ${endpoint}`, error);
@@ -238,7 +254,8 @@ export const apiClient = {
           if ((response.status >= 500 || response.status === 404) && !isProtectedEndpoint(endpoint)) {
             return handleMockFallback('PUT', endpoint, data);
           }
-          throw new Error(formatErrorMessage(response.status, responseData));
+          const code = responseData?.code || responseData?.error;
+          throw new ApiError(formatErrorMessage(response.status, responseData), response.status, code, responseData);
         }
         return responseData;
       } else {
@@ -247,7 +264,7 @@ export const apiClient = {
           if (!isProtectedEndpoint(endpoint)) {
             return handleMockFallback('PUT', endpoint, data);
           }
-          throw new Error(`Request failed with status ${response.status}`);
+          throw new ApiError(`Request failed with status ${response.status}`, response.status);
         }
         try {
           return JSON.parse(text);
@@ -256,10 +273,10 @@ export const apiClient = {
         }
       }
     } catch (error: any) {
-      if (error instanceof AuthRequiredError || error instanceof ForbiddenError || error?.name === 'AuthRequiredError' || error?.name === 'ForbiddenError') {
+      if (error instanceof ApiError || error?.name === 'ApiError' || error instanceof AuthRequiredError || error instanceof ForbiddenError || error?.name === 'AuthRequiredError' || error?.name === 'ForbiddenError') {
         throw error;
       }
-      if (isProtectedEndpoint(endpoint) && !token) {
+      if (isProtectedEndpoint(endpoint)) {
         throw error;
       }
       console.warn(`[apiClient] Using resilient fallback for PUT ${endpoint}`, error);
@@ -307,7 +324,8 @@ export const apiClient = {
           if ((response.status >= 500 || response.status === 404) && !isProtectedEndpoint(endpoint)) {
             return handleMockFallback('PATCH', endpoint, data);
           }
-          throw new Error(formatErrorMessage(response.status, responseData));
+          const code = responseData?.code || responseData?.error;
+          throw new ApiError(formatErrorMessage(response.status, responseData), response.status, code, responseData);
         }
         return responseData;
       } else {
@@ -316,7 +334,7 @@ export const apiClient = {
           if (!isProtectedEndpoint(endpoint)) {
             return handleMockFallback('PATCH', endpoint, data);
           }
-          throw new Error(`Request failed with status ${response.status}`);
+          throw new ApiError(`Request failed with status ${response.status}`, response.status);
         }
         try {
           return JSON.parse(text);
@@ -325,10 +343,10 @@ export const apiClient = {
         }
       }
     } catch (error: any) {
-      if (error instanceof AuthRequiredError || error instanceof ForbiddenError || error?.name === 'AuthRequiredError' || error?.name === 'ForbiddenError') {
+      if (error instanceof ApiError || error?.name === 'ApiError' || error instanceof AuthRequiredError || error instanceof ForbiddenError || error?.name === 'AuthRequiredError' || error?.name === 'ForbiddenError') {
         throw error;
       }
-      if (isProtectedEndpoint(endpoint) && !token) {
+      if (isProtectedEndpoint(endpoint)) {
         throw error;
       }
       console.warn(`[apiClient] Using resilient fallback for PATCH ${endpoint}`, error);
@@ -375,7 +393,8 @@ export const apiClient = {
           if ((response.status >= 500 || response.status === 404) && !isProtectedEndpoint(endpoint)) {
             return handleMockFallback('DELETE', endpoint);
           }
-          throw new Error(formatErrorMessage(response.status, responseData));
+          const code = responseData?.code || responseData?.error;
+          throw new ApiError(formatErrorMessage(response.status, responseData), response.status, code, responseData);
         }
         return responseData;
       } else {
@@ -384,7 +403,7 @@ export const apiClient = {
           if (!isProtectedEndpoint(endpoint)) {
             return handleMockFallback('DELETE', endpoint);
           }
-          throw new Error(`Request failed with status ${response.status}`);
+          throw new ApiError(`Request failed with status ${response.status}`, response.status);
         }
         try {
           return JSON.parse(text);
@@ -393,10 +412,10 @@ export const apiClient = {
         }
       }
     } catch (error: any) {
-      if (error instanceof AuthRequiredError || error instanceof ForbiddenError || error?.name === 'AuthRequiredError' || error?.name === 'ForbiddenError') {
+      if (error instanceof ApiError || error?.name === 'ApiError' || error instanceof AuthRequiredError || error instanceof ForbiddenError || error?.name === 'AuthRequiredError' || error?.name === 'ForbiddenError') {
         throw error;
       }
-      if (isProtectedEndpoint(endpoint) && !token) {
+      if (isProtectedEndpoint(endpoint)) {
         throw error;
       }
       console.warn(`[apiClient] Using resilient fallback for DELETE ${endpoint}`, error);

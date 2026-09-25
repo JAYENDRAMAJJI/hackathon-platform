@@ -28,7 +28,9 @@ import {
   CheckCircle2,
   HelpCircle,
   Code2,
-  AlertCircle
+  AlertCircle,
+  ShieldAlert,
+  FastForward,
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
@@ -36,10 +38,24 @@ import { apiClient } from '../../lib/api';
 import { useToast } from '../../context/AdminToastContext';
 
 export default function ContestArena() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const contestIdParam = searchParams.get('contestId');
+  const [viewingDetailsFirst, setViewingDetailsFirst] = useState<boolean>(() => {
+    return (
+      searchParams.get('preview') === 'true' ||
+      searchParams.get('view') === 'preview' ||
+      searchParams.get('mode') === 'instructions'
+    );
+  });
   const navigate = useNavigate();
   const toast = useToast();
+
+  // Active Contest Conflict State (Single Active Contest Rule Enforcement)
+  const [activeContestConflict, setActiveContestConflict] = useState<{
+    activeContestId: string;
+    activeContestName: string;
+    timeRemainingSeconds?: number;
+  } | null>(null);
 
   // Arena & Lifecycle State
   const [sessionState, setSessionState] = useState<'LOADING' | 'NOT_JOINED' | 'NOT_STARTED' | 'ACTIVE' | 'COMPLETED' | 'EXPIRED'>('LOADING');
@@ -66,6 +82,11 @@ export default function ContestArena() {
   const [showFinishModal, setShowFinishModal] = useState(false);
   const [finishingContest, setFinishingContest] = useState(false);
 
+  // Skips State (Strictly Max 3 Skips Allowed per Contest, -5 pts Deduction per Skip)
+  const [remainingSkips, setRemainingSkips] = useState<number>(3);
+  const [isSkipping, setIsSkipping] = useState<boolean>(false);
+  const [showSkipModal, setShowSkipModal] = useState<boolean>(false);
+
   // In-Arena Code Lock Gate
   const [gateCode, setGateCode] = useState('');
   const [unlockingGate, setUnlockingGate] = useState(false);
@@ -82,10 +103,27 @@ export default function ContestArena() {
       const resp = await apiClient.get(url);
       if (resp.success && resp.data) {
         setPaperData(resp.data);
+        if (resp.data.remainingSkips !== undefined) {
+          setRemainingSkips(resp.data.remainingSkips);
+        } else if (resp.data.contest?.remainingSkips !== undefined) {
+          setRemainingSkips(resp.data.contest.remainingSkips);
+        }
         return resp.data;
       }
     } catch (err: any) {
       console.error('Failed to load question paper:', err);
+      const isConflict = err.code === 'ACTIVE_CONTEST_EXISTS' || err.status === 409 || err.data?.code === 'ACTIVE_CONTEST_EXISTS';
+      if (isConflict) {
+        const targetId = err.data?.data?.activeContestId || err.data?.activeContestId || err.activeContestId;
+        const targetName = err.data?.data?.activeContestName || err.data?.activeContestName || 'Active Competition';
+        setActiveContestConflict({
+          activeContestId: targetId,
+          activeContestName: targetName,
+          timeRemainingSeconds: err.data?.data?.timeRemainingSeconds,
+        });
+        toast.error(`You already have an active contest ("${targetName}"). You cannot enter another contest until your current contest is completed or ended.`);
+        return null;
+      }
       const msg = err.message || 'Contest not joined';
       if (msg.toLowerCase().includes('not joined') || err.code === 'CONTEST_NOT_JOINED') {
         setSessionState('NOT_JOINED');
@@ -102,6 +140,28 @@ export default function ContestArena() {
     try {
       setSessionState('LOADING');
       setUnjoinedError(null);
+
+      // Pre-check for single active contest rule enforcement
+      try {
+        const activeCheck = await apiClient.get('/student/active-contest');
+        if (activeCheck.success && activeCheck.data?.hasActiveContest && activeCheck.data.activeContest) {
+          const currentActive = activeCheck.data.activeContest;
+          if (contestIdParam && contestIdParam !== currentActive.id) {
+            setActiveContestConflict({
+              activeContestId: currentActive.id,
+              activeContestName: currentActive.name,
+              timeRemainingSeconds: currentActive.timeRemainingSeconds,
+            });
+            return;
+          }
+          if (!contestIdParam) {
+            navigate(`/student/contest?contestId=${currentActive.id}`, { replace: true });
+            return;
+          }
+        }
+      } catch (checkErr) {
+        console.warn('Active contest check skipped:', checkErr);
+      }
 
       // Check contest state from backend
       const stateUrl = contestIdParam ? `/student/contest/state?contestId=${contestIdParam}` : '/student/contest/state';
@@ -129,6 +189,15 @@ export default function ContestArena() {
 
         // Contest is ACTIVE (IN PROGRESS):
         setArenaData(d);
+        if (d.remainingSkips !== undefined) {
+          setRemainingSkips(d.remainingSkips);
+        } else if (d.session?.remainingSkips !== undefined) {
+          setRemainingSkips(d.session.remainingSkips);
+        } else if (d.contest?.remainingSkips !== undefined) {
+          setRemainingSkips(d.contest.remainingSkips);
+        } else if (d.session?.skippedCount !== undefined) {
+          setRemainingSkips(Math.max(0, 3 - d.session.skippedCount));
+        }
         setSessionState('ACTIVE');
         const cId = d.contest?.id || contestIdParam || 'contest_1';
         const rawQList = d.questions || [];
@@ -162,6 +231,18 @@ export default function ContestArena() {
       }
     } catch (err: any) {
       console.error('Failed to sync contest session:', err);
+      const isConflict = err.code === 'ACTIVE_CONTEST_EXISTS' || err.status === 409 || err.data?.code === 'ACTIVE_CONTEST_EXISTS';
+      if (isConflict) {
+        const targetId = err.data?.data?.activeContestId || err.data?.activeContestId || err.activeContestId;
+        const targetName = err.data?.data?.activeContestName || err.data?.activeContestName || 'Active Competition';
+        setActiveContestConflict({
+          activeContestId: targetId,
+          activeContestName: targetName,
+          timeRemainingSeconds: err.data?.data?.timeRemainingSeconds,
+        });
+        toast.error(`You already have an active contest ("${targetName}"). You cannot enter another contest until your current contest is completed or ended.`);
+        return;
+      }
       const errorMsg = err.message || 'Unable to synchronize contest arena.';
       if (
         errorMsg.toLowerCase().includes('not joined') ||
@@ -180,6 +261,16 @@ export default function ContestArena() {
     syncContestSession();
   }, [contestIdParam]);
 
+  useEffect(() => {
+    if (
+      searchParams.get('preview') === 'true' ||
+      searchParams.get('view') === 'preview' ||
+      searchParams.get('mode') === 'instructions'
+    ) {
+      setViewingDetailsFirst(true);
+    }
+  }, [searchParams]);
+
   // 3. Start Contest Action (Triggered from Question Paper Preview Confirmation)
   const handleStartContest = async () => {
     setIsStarting(true);
@@ -195,6 +286,18 @@ export default function ContestArena() {
       }
     } catch (err: any) {
       console.error('Failed to start contest:', err);
+      const isConflict = err.code === 'ACTIVE_CONTEST_EXISTS' || err.status === 409 || err.data?.code === 'ACTIVE_CONTEST_EXISTS';
+      if (isConflict) {
+        const targetId = err.data?.data?.activeContestId || err.data?.activeContestId || err.activeContestId;
+        const targetName = err.data?.data?.activeContestName || err.data?.activeContestName || 'Active Competition';
+        setActiveContestConflict({
+          activeContestId: targetId,
+          activeContestName: targetName,
+          timeRemainingSeconds: err.data?.data?.timeRemainingSeconds,
+        });
+        toast.error(`You already have an active contest ("${targetName}"). You cannot enter another contest until your current contest is completed or ended.`);
+        return;
+      }
       toast.error(err.message || 'Failed to start contest attempt.');
     } finally {
       setIsStarting(false);
@@ -390,6 +493,61 @@ export default function ContestArena() {
     }
   };
 
+  // 8b. Skip Question Action (Max 3 skips per contest, -5 points deduction)
+  const handleSkipQuestion = async () => {
+    const currentQ = questions[activeQuestionIndex];
+    if (!currentQ || remainingSkips <= 0) return;
+
+    setIsSkipping(true);
+    try {
+      const cId = arenaData?.contest?.id || contestIdParam || 'contest_1';
+      const resp = await apiClient.post('/student/skip-question', {
+        contestId: cId,
+        questionId: currentQ.id,
+        reason: 'Student skipped question',
+      });
+
+      if (resp.success && resp.data) {
+        const newRemaining = resp.data.remainingSkips ?? Math.max(0, remainingSkips - 1);
+        setRemainingSkips(newRemaining);
+
+        // Update session state in arenaData
+        setArenaData((prev: any) => ({
+          ...prev,
+          session: {
+            ...prev?.session,
+            score: resp.data.newTotalScore ?? Math.max(0, (prev?.session?.score || 0) - 5),
+            skippedCount: resp.data.skippedCount ?? ((prev?.session?.skippedCount || 0) + 1),
+            remainingSkips: newRemaining,
+          },
+        }));
+
+        // Mark current question status as SKIPPED
+        setQuestions((prev) =>
+          prev.map((q, idx) => {
+            if (idx === activeQuestionIndex) {
+              return { ...q, status: q.status === 'SOLVED' ? 'SOLVED' : 'SKIPPED' };
+            }
+            return q;
+          })
+        );
+
+        toast.warning(`Question skipped (-5 pts). ${newRemaining} of 3 skips remaining.`);
+        setShowSkipModal(false);
+
+        // Move to next question if possible
+        if (activeQuestionIndex < questions.length - 1) {
+          handleSelectQuestion(activeQuestionIndex + 1);
+        }
+      }
+    } catch (err: any) {
+      console.error('Failed to skip question:', err);
+      toast.error(err.message || 'Failed to skip question');
+    } finally {
+      setIsSkipping(false);
+    }
+  };
+
   // 9. Unlock with Code Gate Handler
   const handleUnlockGate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -405,8 +563,9 @@ export default function ContestArena() {
         contestId: contestIdParam || undefined,
       });
       if (resp.success) {
-        toast.success('Contest access code verified! Loading Question Paper...');
+        toast.success('Contest access code verified! Opening contest details & guidelines...');
         setUnjoinedError(null);
+        setViewingDetailsFirst(true);
         await syncContestSession();
       }
     } catch (err: any) {
@@ -445,6 +604,64 @@ export default function ContestArena() {
     startHeight.current = consoleHeight;
     document.body.style.cursor = 'row-resize';
   };
+
+  // ==========================================
+  // RENDER STATE 0: ACTIVE CONTEST CONFLICT (PREVENT ENTRY TO ANOTHER CONTEST)
+  // ==========================================
+  if (activeContestConflict) {
+    return (
+      <div className="h-[calc(100vh-8rem)] flex flex-col items-center justify-center -mx-8 -my-8 bg-slate-950 text-white p-6">
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 max-w-lg w-full shadow-2xl space-y-6 text-center animate-in zoom-in-95">
+          <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center mx-auto text-rose-400 shadow-lg">
+            <ShieldAlert className="w-8 h-8" />
+          </div>
+
+          <div className="space-y-3">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-rose-500/10 text-rose-400 border border-rose-500/20">
+              Tournament Regulation Enforcement
+            </div>
+            <h2 className="text-2xl font-black text-white tracking-tight">
+              Active Contest in Progress
+            </h2>
+            <p className="text-sm text-slate-300 leading-relaxed">
+              You are currently active in{' '}
+              <span className="text-white font-extrabold">{activeContestConflict.activeContestName}</span>.
+            </p>
+            <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 text-left text-xs text-slate-400 space-y-2">
+              <div className="flex items-center gap-2 text-amber-400 font-semibold">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                Single Active Contest Restriction
+              </div>
+              <p>
+                Platform and tournament rules strictly prevent students from entering, previewing, or starting another contest while a contest session is currently active. You must complete or end your active contest before participating in any other contest.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3 pt-2">
+            <button
+              onClick={() => {
+                const targetId = activeContestConflict.activeContestId;
+                setActiveContestConflict(null);
+                navigate(`/student/contest?contestId=${targetId}`);
+              }}
+              className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-sm py-3.5 px-4 rounded-xl shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-2 cursor-pointer transition-all"
+            >
+              <Play className="w-4 h-4 fill-white" />
+              Resume Active Contest
+            </button>
+
+            <button
+              onClick={() => navigate('/student/dashboard')}
+              className="w-full py-2.5 text-xs text-slate-400 hover:text-white font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" /> Return to Student Dashboard
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // ==========================================
   // RENDER STATE 1: LOADING
@@ -517,13 +734,23 @@ export default function ContestArena() {
   }
 
   // ==========================================
-  // RENDER STATE 3: JOINED / NOT STARTED -> QUESTION PAPER PREVIEW
+  // RENDER STATE 3: JOINED / NOT STARTED OR VIEWING CONTEST DETAILS FIRST -> QUESTION PAPER PREVIEW
   // ==========================================
-  if (sessionState === 'NOT_STARTED' && paperData) {
+  if ((sessionState === 'NOT_STARTED' || viewingDetailsFirst) && paperData) {
     return (
       <QuestionPaperPreview
         paperData={paperData}
-        onStartContest={handleStartContest}
+        onStartContest={async () => {
+          if (sessionState === 'NOT_STARTED' || !arenaData?.session?.startedAt) {
+            await handleStartContest();
+          }
+          setViewingDetailsFirst(false);
+          const newParams = new URLSearchParams(searchParams);
+          newParams.delete('preview');
+          newParams.delete('view');
+          newParams.delete('mode');
+          setSearchParams(newParams, { replace: true });
+        }}
         onBackToContests={() => navigate('/student/dashboard')}
         isStarting={isStarting}
       />
@@ -658,10 +885,22 @@ export default function ContestArena() {
           />
 
           {/* Current Score Badge */}
-          <div className="flex items-center gap-1.5 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-800">
+          <div className="flex items-center gap-1.5 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-800" title="Current session tournament score (Max 100 pts)">
             <Trophy className="w-3.5 h-3.5 text-yellow-400" />
             <span className="text-xs text-slate-400 font-semibold hidden md:inline">Score:</span>
-            <span className="font-mono font-black text-xs text-white">{session.score || 0} pts</span>
+            <span className="font-mono font-black text-xs text-amber-400">{session.score || 0} pts</span>
+          </div>
+
+          {/* Skips Remaining Badge */}
+          <div
+            className="flex items-center gap-1.5 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-800"
+            title="Problem Skips Allowed: Max 3 skips per contest (-5 pts penalty per skip)"
+          >
+            <FastForward className="w-3.5 h-3.5 text-rose-400" />
+            <span className="text-xs text-slate-400 font-semibold hidden md:inline">Skips Left:</span>
+            <span className={`font-mono font-black text-xs ${remainingSkips > 0 ? 'text-rose-300' : 'text-slate-500'}`}>
+              {remainingSkips} / 3
+            </span>
           </div>
 
           {/* Question Paper Review Button */}
@@ -1187,6 +1426,25 @@ export default function ContestArena() {
                 <ChevronRight className="w-3.5 h-3.5 shrink-0" />
               </button>
 
+              {/* Skip Question Action (Max 3 Skips, -5 pts Deduction) */}
+              <button
+                type="button"
+                onClick={() => setShowSkipModal(true)}
+                disabled={remainingSkips <= 0 || currentQuestion?.status === 'SOLVED' || isExecuting || isSkipping}
+                className="h-9 px-2.5 sm:px-3 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 hover:text-rose-200 border border-rose-800/60 text-xs font-bold disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer whitespace-nowrap shrink-0 inline-flex items-center gap-1.5 shadow-sm"
+                title={
+                  remainingSkips <= 0
+                    ? 'No skips remaining (Max 3 used)'
+                    : currentQuestion?.status === 'SOLVED'
+                    ? 'Problem already solved'
+                    : `Skip this question (-5 pts). ${remainingSkips} of 3 skips left.`
+                }
+              >
+                <FastForward className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                <span className="hidden sm:inline">Skip</span>
+                <span className="text-[10px] text-rose-400 font-mono">(-5p)</span>
+              </button>
+
               <div className="h-4 w-px bg-slate-800 shrink-0 mx-0.5" />
 
               {/* Run Code */}
@@ -1265,6 +1523,56 @@ export default function ContestArena() {
                 className="bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold px-5 py-2.5 rounded-xl shadow-lg shadow-rose-600/20 cursor-pointer disabled:opacity-50 transition-all"
               >
                 {finishingContest ? 'Finalizing...' : 'Yes, Finish & Submit'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 3: CONFIRM QUESTION SKIP (-5 PTS, MAX 3 SKIPS) */}
+      {showSkipModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 text-white">
+            <div className="flex items-center gap-3 text-rose-400">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center shrink-0">
+                <FastForward className="w-5 h-5 text-rose-400" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-lg text-white">Skip Question {activeQuestionIndex + 1}?</h3>
+                <p className="text-xs text-rose-400 font-semibold">-5 Points Score Deduction</p>
+              </div>
+            </div>
+
+            <div className="space-y-2.5 text-xs text-slate-300 bg-slate-950/60 p-4 rounded-xl border border-slate-800 leading-relaxed">
+              <p>
+                Are you sure you want to skip <b>&ldquo;{currentQuestion?.title}&rdquo;</b>?
+              </p>
+              <ul className="list-disc pl-4 space-y-1 text-slate-400 pt-1">
+                <li>A penalty of <b className="text-rose-400 font-bold">5 points</b> will be deducted immediately.</li>
+                <li>
+                  You have <b className="text-amber-400 font-bold">{remainingSkips} of 3</b> skips remaining in this contest.
+                </li>
+                <li>Once all 3 skips are consumed, no further questions can be skipped.</li>
+              </ul>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                disabled={isSkipping}
+                onClick={() => setShowSkipModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                Cancel & Continue Solving
+              </button>
+              <button
+                type="button"
+                disabled={isSkipping || remainingSkips <= 0}
+                onClick={handleSkipQuestion}
+                className="bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold px-5 py-2.5 rounded-xl shadow-lg shadow-rose-600/20 cursor-pointer disabled:opacity-50 transition-all flex items-center gap-1.5"
+              >
+                <FastForward className="w-3.5 h-3.5" />
+                {isSkipping ? 'Skipping...' : 'Confirm Skip (-5 pts)'}
               </button>
             </div>
           </div>

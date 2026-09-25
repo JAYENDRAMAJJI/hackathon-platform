@@ -21,7 +21,7 @@ import {
   KeyRound,
   RefreshCw,
   UserCheck,
-  Globe
+  Globe,
 } from 'lucide-react';
 import { apiClient } from '../../lib/api';
 import { useToast } from '../../context/AdminToastContext';
@@ -271,7 +271,7 @@ export default function CreateContest() {
                   value={formData.code}
                   onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
                   placeholder="e.g. HACK2026"
-                  className="w-full px-3.5 py-2.5 bg-slate-800 border border-amber-500/40 rounded-xl text-amber-300 font-mono font-bold text-sm tracking-wider uppercase focus:outline-none focus:border-amber-400"
+                  className="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-amber-300 font-mono font-bold text-sm tracking-wider uppercase focus:outline-none focus:border-amber-400"
                 />
               </div>
             </div>
@@ -371,7 +371,7 @@ export default function CreateContest() {
             onChange={(ids) => setSelectedFacultyIds(ids)}
             showSaveButton={false}
             title="Assign Faculty Supervisors"
-            description="Select registered faculty members to supervise this competition. Only assigned faculty can monitor live telemetry, review student submissions, and receive proctoring anomaly alerts."
+            description="Assign faculty to monitor live telemetry, review student submissions, and receive proctoring anomaly alerts."
           />
         </div>
 

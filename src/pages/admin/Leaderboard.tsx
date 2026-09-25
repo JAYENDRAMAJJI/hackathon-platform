@@ -281,17 +281,27 @@ export default function Leaderboard() {
       {/* Full Leaderboard Table */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden print:border-none print:shadow-none print:bg-white print:overflow-visible">
         <div className="overflow-x-auto print:overflow-visible">
-          <table className="w-full text-left text-sm text-slate-300 print:text-slate-900">
+          <table className="w-full text-left text-sm text-slate-300 print:text-slate-900 print:text-xs">
+            <colgroup>
+              <col className="w-16 print:w-[6%]" />
+              <col className="print:w-[24%]" />
+              <col className="print:w-[12%]" />
+              <col className="print:w-[12%]" />
+              <col className="print:w-[14%]" />
+              <col className="print:w-[13%]" />
+              <col className="print:w-[10%]" />
+              <col className="print:w-[9%]" />
+            </colgroup>
             <thead className="bg-slate-800/80 text-xs font-bold uppercase tracking-wider text-slate-400 border-b border-slate-700 print:bg-slate-100 print:text-slate-900 print:border-slate-300">
               <tr>
-                <th className="p-4 w-16 print:p-2 print:border print:border-slate-300">Rank</th>
-                <th className="p-4 print:p-2 print:border print:border-slate-300">Student Name</th>
-                <th className="p-4 print:p-2 print:border print:border-slate-300">Total Score</th>
-                <th className="p-4 print:p-2 print:border print:border-slate-300">Problems Solved</th>
-                <th className="p-4 print:p-2 print:border print:border-slate-300">Attempts / Skips</th>
-                <th className="p-4 print:p-2 print:border print:border-slate-300">Difficulty (Active/Max)</th>
-                <th className="p-4 print:p-2 print:border print:border-slate-300">Avg Solving Time</th>
-                <th className="p-4 print:p-2 print:border print:border-slate-300">Live Status</th>
+                <th className="p-4 w-16 text-center print:p-2 print:border print:border-slate-300 whitespace-nowrap">Rank</th>
+                <th className="p-4 print:p-2 print:border print:border-slate-300 whitespace-nowrap">Student Name</th>
+                <th className="p-4 print:p-2 print:border print:border-slate-300 whitespace-nowrap">Total Score</th>
+                <th className="p-4 print:p-2 print:border print:border-slate-300 whitespace-nowrap">Problems Solved</th>
+                <th className="p-4 print:p-2 print:border print:border-slate-300 whitespace-nowrap">Attempts / Skips</th>
+                <th className="p-4 print:p-2 print:border print:border-slate-300 whitespace-nowrap">Difficulty (Active/Max)</th>
+                <th className="p-4 print:p-2 print:border print:border-slate-300 whitespace-nowrap">Avg Solving Time</th>
+                <th className="p-4 text-center print:p-2 print:border print:border-slate-300 whitespace-nowrap">Live Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/70 print:divide-slate-300">
@@ -305,56 +315,58 @@ export default function Leaderboard() {
               ) : (
                 filtered.map((item) => (
                   <tr key={item.studentId} className="hover:bg-slate-800/50 transition-colors">
-                    <td className="p-4">
+                    <td className="p-4 print:p-2 text-center whitespace-nowrap">
                       <span className={`inline-flex items-center justify-center h-7 w-7 rounded-full text-xs font-black ${
                         item.rank === 1
-                          ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/30'
+                          ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/30 print:bg-amber-400 print:text-slate-950 print:border print:border-amber-500'
                           : item.rank === 2
-                          ? 'bg-slate-300 text-slate-950'
+                          ? 'bg-slate-300 text-slate-950 print:bg-slate-200 print:text-slate-900 print:border print:border-slate-400'
                           : item.rank === 3
-                          ? 'bg-amber-700 text-white'
-                          : 'bg-slate-800 text-slate-400'
+                          ? 'bg-amber-700 text-white print:bg-amber-700 print:text-white print:border print:border-amber-800'
+                          : 'bg-slate-800 text-slate-400 print:bg-slate-100 print:text-slate-800 print:border print:border-slate-300'
                       }`}>
                         #{item.rank}
                       </span>
                     </td>
-                    <td className="p-4">
-                      <div className="font-bold text-white text-xs">{item.studentName}</div>
-                      <div className="text-[11px] text-slate-400">{item.studentEmail}</div>
+                    <td className="p-4 print:p-2">
+                      <div className="font-bold text-white text-xs print:text-slate-900 whitespace-nowrap">{item.studentName}</div>
+                      <div className="text-[11px] text-slate-400 print:text-slate-600 font-mono whitespace-nowrap">{item.studentEmail}</div>
                     </td>
-                    <td className="p-4">
-                      <span className="text-base font-black text-amber-400">{item.score} pts</span>
+                    <td className="p-4 print:p-2 whitespace-nowrap">
+                      <span className="text-base font-black text-amber-400 print:text-amber-600 print:text-sm whitespace-nowrap">
+                        {item.score} <span className="text-xs font-bold text-amber-500/90 print:text-amber-600 whitespace-nowrap">pts</span>
+                      </span>
                     </td>
-                    <td className="p-4">
-                      <span className="font-bold text-emerald-400 text-xs">{item.solved} solved</span>
+                    <td className="p-4 print:p-2 whitespace-nowrap">
+                      <span className="font-bold text-emerald-400 print:text-emerald-700 text-xs whitespace-nowrap">{item.solved} solved</span>
                     </td>
-                    <td className="p-4 text-xs">
-                      <span className="text-slate-300 font-semibold">{item.attempts} attempts</span>
-                      <span className="text-slate-500"> • </span>
-                      <span className="text-amber-400">{item.skipped} skips</span>
+                    <td className="p-4 print:p-2 text-xs whitespace-nowrap">
+                      <span className="text-slate-300 print:text-slate-800 font-semibold whitespace-nowrap">{item.attempts} attempts</span>
+                      <span className="text-slate-500 print:text-slate-400"> • </span>
+                      <span className="text-amber-400 print:text-amber-700 font-semibold whitespace-nowrap">{item.skipped} skips</span>
                     </td>
-                    <td className="p-4">
-                      <div className="inline-flex items-center gap-1 text-xs">
-                        <span className="px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 font-bold">
+                    <td className="p-4 print:p-2 whitespace-nowrap">
+                      <div className="inline-flex items-center gap-1 text-xs whitespace-nowrap">
+                        <span className="px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 print:bg-blue-100 print:text-blue-800 print:border print:border-blue-300 font-bold whitespace-nowrap">
                           L{item.currentDifficulty}
                         </span>
-                        <span className="text-slate-500">/</span>
-                        <span className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-400 font-bold">
+                        <span className="text-slate-500 print:text-slate-400">/</span>
+                        <span className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-400 print:bg-purple-100 print:text-purple-800 print:border print:border-purple-300 font-bold whitespace-nowrap">
                           Max: L{item.highestDifficulty}
                         </span>
                       </div>
                     </td>
-                    <td className="p-4 text-xs text-slate-300 font-mono">
+                    <td className="p-4 print:p-2 text-xs text-slate-300 print:text-slate-800 font-mono whitespace-nowrap">
                       {item.averageTimeMinutes} min
                     </td>
-                    <td className="p-4">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                    <td className="p-4 print:p-2 text-center whitespace-nowrap">
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${
                         item.isOnline
-                          ? 'bg-emerald-500/20 text-emerald-400'
-                          : 'bg-slate-800 text-slate-500'
+                          ? 'bg-emerald-500/20 text-emerald-400 print:bg-emerald-100 print:text-emerald-800 print:border print:border-emerald-300'
+                          : 'bg-slate-800 text-slate-500 print:bg-slate-100 print:text-slate-700 print:border print:border-slate-300'
                       }`}>
-                        {item.isOnline && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span>}
-                        {item.isOnline ? 'ONLINE' : 'OFFLINE'}
+                        {item.isOnline && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400 print:bg-emerald-600 print:inline-block"></span>}
+                        <span className="whitespace-nowrap font-bold tracking-wide">{item.isOnline ? 'ONLINE' : 'OFFLINE'}</span>
                       </span>
                     </td>
                   </tr>

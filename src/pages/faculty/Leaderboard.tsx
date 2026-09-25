@@ -284,16 +284,27 @@ export default function FacultyLeaderboard() {
         <CardContent className="p-0 print:overflow-visible">
           <div className="overflow-x-auto print:overflow-visible">
             <table className="w-full text-xs text-left print:text-slate-900">
+              <colgroup>
+                <col className="w-16 print:w-[6%]" />
+                <col className="print:w-[22%]" />
+                <col className="print:w-[16%]" />
+                <col className="print:w-[12%]" />
+                <col className="print:w-[14%]" />
+                <col className="print:w-[8%]" />
+                <col className="print:w-[12%]" />
+                <col className="print:w-[10%]" />
+                <col className="w-20 print:hidden" />
+              </colgroup>
               <thead className="bg-slate-800/90 text-xs font-bold uppercase tracking-wider text-slate-200 border-b border-slate-700 print:bg-slate-100 print:text-slate-900 print:border-slate-300">
                 <tr>
-                  <th className="px-4 py-3.5 text-center print:p-2 print:border print:border-slate-300">Rank</th>
-                  <th className="px-4 py-3.5 print:p-2 print:border print:border-slate-300">Student</th>
-                  <th className="px-4 py-3.5 print:p-2 print:border print:border-slate-300">Department</th>
-                  <th className="px-4 py-3.5 text-center print:p-2 print:border print:border-slate-300">Score</th>
-                  <th className="px-4 py-3.5 text-center print:p-2 print:border print:border-slate-300">Solved / Attempts</th>
-                  <th className="px-4 py-3.5 text-center print:p-2 print:border print:border-slate-300">Skipped</th>
-                  <th className="px-4 py-3.5 text-center print:p-2 print:border print:border-slate-300">Difficulty</th>
-                  <th className="px-4 py-3.5 print:p-2 print:border print:border-slate-300">Avg Time</th>
+                  <th className="px-4 py-3.5 text-center print:p-2 print:border print:border-slate-300 whitespace-nowrap">Rank</th>
+                  <th className="px-4 py-3.5 print:p-2 print:border print:border-slate-300 whitespace-nowrap">Student</th>
+                  <th className="px-4 py-3.5 print:p-2 print:border print:border-slate-300 whitespace-nowrap">Department</th>
+                  <th className="px-4 py-3.5 text-center print:p-2 print:border print:border-slate-300 whitespace-nowrap">Score</th>
+                  <th className="px-4 py-3.5 text-center print:p-2 print:border print:border-slate-300 whitespace-nowrap">Solved / Attempts</th>
+                  <th className="px-4 py-3.5 text-center print:p-2 print:border print:border-slate-300 whitespace-nowrap">Skipped</th>
+                  <th className="px-4 py-3.5 text-center print:p-2 print:border print:border-slate-300 whitespace-nowrap">Difficulty</th>
+                  <th className="px-4 py-3.5 print:p-2 print:border print:border-slate-300 whitespace-nowrap">Avg Time</th>
                   <th className="px-4 py-3.5 text-right print:hidden">Action</th>
                 </tr>
               </thead>
@@ -313,60 +324,60 @@ export default function FacultyLeaderboard() {
                         st.isAssignedToFaculty ? 'bg-indigo-950/20' : ''
                       }`}
                     >
-                      <td className="px-4 py-3.5 text-center font-bold">
+                      <td className="px-4 py-3.5 print:p-2 text-center font-bold whitespace-nowrap">
                         {st.rank === 1 ? (
-                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-400 text-slate-950 font-bold">
+                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-400 text-slate-950 font-bold print:border print:border-amber-500">
                             1
                           </span>
                         ) : st.rank === 2 ? (
-                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-slate-300 text-slate-950 font-bold">
+                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-slate-300 text-slate-950 font-bold print:border print:border-slate-400">
                             2
                           </span>
                         ) : st.rank === 3 ? (
-                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-700 text-white font-bold">
+                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-700 text-white font-bold print:border print:border-amber-800">
                             3
                           </span>
                         ) : (
-                          <span className="text-slate-400 font-mono">#{st.rank}</span>
+                          <span className="text-slate-400 font-mono print:text-slate-700">#{st.rank}</span>
                         )}
                       </td>
 
-                      <td className="px-4 py-3.5">
-                        <div className="flex items-center gap-2">
-                          <p className="font-bold text-white">{st.name}</p>
+                      <td className="px-4 py-3.5 print:p-2">
+                        <div className="flex items-center gap-2 whitespace-nowrap">
+                          <p className="font-bold text-white print:text-slate-900">{st.name}</p>
                           {st.isAssignedToFaculty && (
-                            <span className="px-1.5 py-0.5 text-[9px] font-bold bg-indigo-600 text-white rounded">
+                            <span className="px-1.5 py-0.5 text-[9px] font-bold bg-indigo-600 text-white rounded print:bg-indigo-100 print:text-indigo-800 print:border print:border-indigo-300">
                               YOUR COHORT
                             </span>
                           )}
                         </div>
-                        <p className="text-[10px] text-slate-400 font-mono">{st.email}</p>
+                        <p className="text-[10px] text-slate-400 print:text-slate-600 font-mono whitespace-nowrap">{st.email}</p>
                       </td>
 
-                      <td className="px-4 py-3.5 text-slate-300">
+                      <td className="px-4 py-3.5 print:p-2 text-slate-300 print:text-slate-800 whitespace-nowrap">
                         {st.department || 'Computer Science'}
                       </td>
 
-                      <td className="px-4 py-3.5 text-center font-bold text-indigo-400 text-sm">
-                        {st.score} pts
+                      <td className="px-4 py-3.5 print:p-2 text-center font-bold text-indigo-400 print:text-indigo-700 text-sm whitespace-nowrap">
+                        {st.score} <span className="text-xs">pts</span>
                       </td>
 
-                      <td className="px-4 py-3.5 text-center">
-                        <span className="font-bold text-emerald-400">{st.solved}</span>
-                        <span className="text-slate-400"> / {st.attempts}</span>
+                      <td className="px-4 py-3.5 print:p-2 text-center whitespace-nowrap">
+                        <span className="font-bold text-emerald-400 print:text-emerald-700">{st.solved}</span>
+                        <span className="text-slate-400 print:text-slate-500"> / {st.attempts}</span>
                       </td>
 
-                      <td className="px-4 py-3.5 text-center font-semibold text-amber-400">
+                      <td className="px-4 py-3.5 print:p-2 text-center font-semibold text-amber-400 print:text-amber-700 whitespace-nowrap">
                         {st.skipped}
                       </td>
 
-                      <td className="px-4 py-3.5 text-center">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 border border-slate-700 text-slate-300">
+                      <td className="px-4 py-3.5 print:p-2 text-center whitespace-nowrap">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 border border-slate-700 text-slate-300 print:bg-slate-100 print:text-slate-800 print:border-slate-300 whitespace-nowrap">
                           L{st.currentDifficulty} (Peak L{st.highestDifficulty})
                         </span>
                       </td>
 
-                      <td className="px-4 py-3.5 font-mono text-slate-400 text-[11px]">
+                      <td className="px-4 py-3.5 print:p-2 font-mono text-slate-400 print:text-slate-700 text-[11px] whitespace-nowrap">
                         {st.averageSolvingTime || '—'}
                       </td>
 

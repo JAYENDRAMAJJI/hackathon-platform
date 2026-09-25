@@ -155,10 +155,10 @@ export default function FacultyManagement() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
-            <Briefcase className="w-6 h-6 text-purple-400" /> Faculty Supervisors & Mentors
+            <Briefcase className="w-6 h-6 text-purple-400" /> Faculty Management
           </h1>
           <p className="text-sm text-slate-400 mt-1">
-            Supervise contest monitors, assign student batches, and track supervisory interventions.
+            Manage faculty mentors, student batches, and supervisory activities.
           </p>
         </div>
 

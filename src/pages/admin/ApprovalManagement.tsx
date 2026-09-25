@@ -152,10 +152,10 @@ export default function ApprovalManagement() {
             </span>
           </div>
           <h1 className="text-2xl font-extrabold text-white tracking-tight mt-1 flex items-center gap-2">
-            <UserCheck className="w-6 h-6 text-amber-400" /> Pending Student & Faculty Approvals
+            <UserCheck className="w-6 h-6 text-amber-400" /> Pending Approvals
           </h1>
           <p className="text-sm text-slate-400 mt-1">
-            Review university registrations, confirm verified emails, and authorize access to the contest arena.
+            Review and approve student/faculty registrations and access requests.
           </p>
         </div>
 

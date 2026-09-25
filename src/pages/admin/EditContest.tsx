@@ -18,7 +18,9 @@ import {
   KeyRound,
   RefreshCw,
   UserCheck,
-  Globe
+  Globe,
+  Lock,
+  Copy,
 } from 'lucide-react';
 import { apiClient } from '../../lib/api';
 import { useToast } from '../../context/AdminToastContext';
@@ -67,13 +69,6 @@ export default function EditContest() {
     networkDisabled: true,
     readOnlyFs: true,
   });
-
-  const generateRandomCode = () => {
-    const prefixes = ['HACK', 'ARENA', 'CODE', 'SPRINT', 'DEV', 'ALGO'];
-    const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
-    const num = Math.floor(1000 + Math.random() * 9000);
-    return `${prefix}${num}`;
-  };
 
   useEffect(() => {
     const fetchContestAndFaculty = async () => {
@@ -302,28 +297,39 @@ export default function EditContest() {
 
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <label className="font-semibold text-slate-300 flex items-center gap-1">
-                    <KeyRound className="w-3.5 h-3.5 text-amber-400" /> Contest Code *
+                  <label className="font-semibold text-slate-300 flex items-center gap-1.5 text-xs">
+                    <KeyRound className="w-3.5 h-3.5 text-amber-400" /> Contest Code
                   </label>
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-1">
+                    <Lock className="w-2.5 h-2.5" /> Permanent & Immutable
+                  </span>
+                </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    disabled
+                    readOnly
+                    value={formData.code}
+                    className="w-full px-3.5 py-2.5 bg-slate-900/90 border border-slate-700/80 rounded-xl text-amber-300 font-mono font-bold text-sm tracking-wider uppercase opacity-90 cursor-not-allowed select-all"
+                  />
                   <button
                     type="button"
                     onClick={() => {
-                      const newCode = generateRandomCode();
-                      setFormData({ ...formData, code: newCode });
-                      toast.info(`Regenerated contest access code: ${newCode}`);
+                      if (formData.code) {
+                        navigator.clipboard.writeText(formData.code);
+                        toast.success(`Contest code "${formData.code}" copied to clipboard!`);
+                      }
                     }}
-                    className="text-[11px] text-blue-400 hover:text-blue-300 font-semibold flex items-center gap-1 cursor-pointer transition-colors active:scale-95"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 flex items-center gap-1 transition-colors cursor-pointer"
+                    title="Copy Contest Code"
                   >
-                    <RefreshCw className="w-3 h-3 hover:rotate-180 transition-transform duration-300" /> Auto
+                    <Copy className="w-3 h-3 text-amber-400" /> Copy
                   </button>
                 </div>
-                <input
-                  type="text"
-                  required
-                  value={formData.code}
-                  onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
-                  className="w-full px-3.5 py-2.5 bg-slate-800 border border-amber-500/40 rounded-xl text-amber-300 font-mono font-bold text-sm tracking-wider uppercase focus:outline-none focus:border-amber-400"
-                />
+                <p className="text-[11px] text-slate-400 flex items-center gap-1 mt-1">
+                  <Lock className="w-3 h-3 text-amber-400/80 shrink-0" />
+                  Contest code is permanent and unchanged once generated. It cannot be regenerated or modified.
+                </p>
               </div>
             </div>
 
@@ -431,7 +437,7 @@ export default function EditContest() {
             onChange={(ids) => setSelectedFacultyIds(ids)}
             showSaveButton={true}
             title="Assigned Faculty Supervisors"
-            description="Faculty members assigned here receive live telemetry, student submission logs, proctoring alert notifications, and exclusive supervisory access."
+            description="Assign faculty to monitor live telemetry, review student submissions, and receive proctoring anomaly alerts."
           />
         </div>
 

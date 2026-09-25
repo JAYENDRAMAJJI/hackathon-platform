@@ -238,6 +238,7 @@ export default function StudentAnalytics() {
                       <Link
                         to={`/admin/students`}
                         className="p-1.5 rounded-lg text-blue-400 hover:bg-blue-950/40 inline-block"
+                        title="View Student Insights"
                       >
                         <Eye className="w-4 h-4" />
                       </Link>
