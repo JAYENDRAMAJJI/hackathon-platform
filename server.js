@@ -1669,6 +1669,9 @@ app.post("/api/auth/google", (req, res) => {
     return res.status(400).json({ success: false, message: "Role selection is required (STUDENT, FACULTY, or ADMIN)." });
   }
   const cleanEmail = String(email || "").trim().toLowerCase();
+  if (!cleanEmail) {
+    return res.status(400).json({ success: false, message: "A valid email address is required for Google authentication." });
+  }
   let user = findUserByIdentifier(cleanEmail, role);
   if (!user && googleId) {
     user = db.users.find((u) => u.googleId === googleId);
@@ -1992,10 +1995,7 @@ app.post("/api/auth/login", (req, res) => {
     return res.status(400).json({ success: false, message: "Please enter both your email/username and password." });
   }
   const user = findUserByIdentifier(identifier, role);
-  console.log(`[Auth] User found: ${Boolean(user)}`);
-  const passwordMatches = Boolean(
-    user && (user.password === password || password === "Pass@123" || password === "password" || password === "password123" || password === "admin123" || password === "admin" || password === "Pass@1234" || password === "faculty123" || password === "student123" || password === "123456")
-  );
+  const passwordMatches = Boolean(user && user.password === password);
   console.log(`[Auth] Password matches: ${Boolean(passwordMatches)}`);
   if (!user || !passwordMatches) {
     return res.status(401).json({ success: false, message: "Invalid email or password." });

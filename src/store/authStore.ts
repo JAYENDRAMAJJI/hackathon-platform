@@ -51,8 +51,17 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
   logout: () => {
     try {
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` }
+        }).catch(() => {});
+      }
       localStorage.removeItem('auth_token');
       localStorage.removeItem('auth_user');
+      sessionStorage.removeItem('auth_token');
+      sessionStorage.removeItem('auth_user');
     } catch (_) {}
     set({ user: null, token: null, isAuthenticated: false });
   },

@@ -109,7 +109,7 @@ export default function Home() {
                   onClick={() => navigate('/login')}
                   className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-5 py-2.5 rounded-xl shadow-md shadow-indigo-600/20 flex items-center gap-1.5 transition-all hover:shadow-lg hover:shadow-indigo-600/30"
                 >
-                  Login
+                  Sign In
                   <ArrowRight className="w-3.5 h-3.5" />
                 </Button>
               </>
@@ -147,7 +147,7 @@ export default function Home() {
                 }}
                 className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold py-3 rounded-xl justify-center"
               >
-                {isAuthenticated ? 'Open Dashboard' : 'Login to Platform'}
+                {isAuthenticated ? 'Open Dashboard' : 'Sign In to Platform'}
               </Button>
             </div>
           </div>
@@ -187,7 +187,7 @@ export default function Home() {
                   onClick={() => navigate('/login')}
                   className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm px-8 py-3.5 rounded-xl shadow-lg shadow-indigo-600/25 flex items-center justify-center gap-2 transition-all hover:scale-[1.02]"
                 >
-                  Login to Continue
+                  Sign In to Continue
                   <ArrowRight className="w-4 h-4" />
                 </Button>
 
@@ -810,7 +810,7 @@ export default function Home() {
               onClick={() => navigate('/login')}
               className="bg-white hover:bg-slate-100 text-indigo-700 font-bold text-sm px-8 py-3.5 rounded-xl shadow-xl shadow-indigo-900/30 transition-all hover:scale-105"
             >
-              Login to Platform
+              Sign In to Platform
             </Button>
           </div>
         </div>

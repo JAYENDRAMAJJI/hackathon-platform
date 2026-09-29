@@ -69,28 +69,6 @@ import AdminProfile from './pages/admin/AdminProfile';
 import HelpDocumentation from './pages/admin/HelpDocumentation';
 import { useAuthStore } from './store/authStore';
 
-// Root Entry Redirection: Unauthenticated users are redirected to /login (Sign In page).
-// Authenticated users are safely routed to their role-specific dashboard.
-function RootRedirect() {
-  const { isAuthenticated, user } = useAuthStore();
-
-  if (!isAuthenticated || !user) {
-    return <Navigate to="/login" replace />;
-  }
-
-  if (user.role === 'STUDENT') {
-    return <Navigate to="/student/dashboard" replace />;
-  }
-  if (user.role === 'FACULTY') {
-    return <Navigate to="/faculty/dashboard" replace />;
-  }
-  if (user.role === 'ADMIN') {
-    return <Navigate to="/admin/dashboard" replace />;
-  }
-
-  return <Navigate to="/login" replace />;
-}
-
 export default function App() {
   const { isAuthenticated, logout } = useAuthStore();
 
@@ -99,14 +77,23 @@ export default function App() {
     const token = localStorage.getItem('auth_token');
     if (token) {
       fetch('/api/auth/me', {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       })
         .then((res) => {
           if (!res.ok) {
             logout();
+          } else {
+            return res.json();
           }
         })
-        .catch(() => {});
+        .then((data) => {
+          if (data && data.data) {
+            useAuthStore.getState().updateUser(data.data);
+          }
+        })
+        .catch(() => {
+          logout();
+        });
     } else {
       if (isAuthenticated) {
         logout();
@@ -118,21 +105,25 @@ export default function App() {
     <ToastProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<RootRedirect />} />
+          {/* Public Root Entry: Always displays the Home Page first on localhost URL */}
+          <Route path="/" element={<Home />} />
           <Route path="/home" element={<Home />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/signin" element={<Navigate to="/login" replace />} />
           <Route path="/register" element={<Register />} />
           <Route path="/signup" element={<Navigate to="/register" replace />} />
           <Route path="/account/pending" element={<PendingApproval />} />
           <Route path="/unauthorized" element={<Unauthorized />} />
 
-          {/* Student Protected Routes */}
+          {/* Student Protected Routes: Requires authentication */}
           <Route element={<ProtectedRoute allowedRoles={['STUDENT']} />}>
             <Route element={<DashboardLayout />}>
+              <Route path="/student" element={<Navigate to="/student/dashboard" replace />} />
               <Route path="/student/dashboard" element={<StudentDashboard />} />
               <Route path="/dashboard" element={<Navigate to="/student/dashboard" replace />} />
               <Route path="/student/contest" element={<ContestArena />} />
               <Route path="/arena" element={<Navigate to="/student/contest" replace />} />
+              <Route path="/coding" element={<Navigate to="/student/contest" replace />} />
               <Route path="/student/leaderboard" element={<StudentLeaderboard />} />
               <Route path="/leaderboard" element={<Navigate to="/student/leaderboard" replace />} />
             </Route>
@@ -185,6 +176,7 @@ export default function App() {
           {/* Admin Protected Routes with Dedicated Admin Layout */}
           <Route element={<ProtectedRoute allowedRoles={['ADMIN']} />}>
             <Route element={<AdminLayout />}>
+              <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
               <Route path="/admin/dashboard" element={<AdminDashboard />} />
               <Route path="/admin/users" element={<UserManagement />} />
               <Route path="/admin/students" element={<StudentManagement />} />

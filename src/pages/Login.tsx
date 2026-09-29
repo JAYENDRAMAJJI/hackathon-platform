@@ -58,18 +58,7 @@ export default function Login() {
     isJustRegistered ? 'Account registered successfully! Please sign in below.' : null
   );
 
-  // If already authenticated with valid session, navigate directly to role-specific dashboard
-  useEffect(() => {
-    if (isAuthenticated && currentUser) {
-      if (currentUser.role === 'STUDENT') {
-        navigate('/student/dashboard', { replace: true });
-      } else if (currentUser.role === 'FACULTY') {
-        navigate('/faculty/dashboard', { replace: true });
-      } else if (currentUser.role === 'ADMIN') {
-        navigate('/admin/dashboard', { replace: true });
-      }
-    }
-  }, [isAuthenticated, currentUser, navigate]);
+  // Active session banner is displayed if already signed in, allowing easy logout or dashboard access
 
   // Password Requirements Checker
   const passwordCriteria = useMemo(() => {
@@ -128,12 +117,10 @@ export default function Login() {
       setRoleMismatchError(null);
       setRoleError(null);
 
-      // Default mock Google OAuth emails for simulation if identifier is blank
-      let googleEmail = identifier.trim().toLowerCase();
+      const googleEmail = identifier.trim().toLowerCase();
       if (!googleEmail) {
-        if (selectedRole === 'STUDENT') googleEmail = 'student@hackathon.com';
-        else if (selectedRole === 'FACULTY') googleEmail = 'faculty@hackathon.com';
-        else googleEmail = 'admin@hackathon.com';
+        setIdentifierError('Please enter your university email address before continuing with Google.');
+        return;
       }
 
       const resp = await apiClient.post('/auth/google', {
@@ -663,95 +650,7 @@ export default function Login() {
               </div>
             </div>
 
-            {/* DEMO CREDENTIALS QUICK FILL CARD */}
-            <div className="p-3.5 rounded-xl bg-slate-100/90 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200">
-                  <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-                  <span>Demo Login Quick-Fill</span>
-                </div>
-                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono bg-slate-200/70 dark:bg-slate-800 px-2 py-0.5 rounded">
-                  Pass: <strong className="text-slate-800 dark:text-slate-200">Pass@123</strong>
-                </span>
-              </div>
 
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedRole('STUDENT');
-                    setIdentifier('student@hackarena.edu');
-                    setPassword('Pass@123');
-                    setRoleError(null);
-                    setIdentifierError(null);
-                    setPasswordError(null);
-                    setFormError(null);
-                    setRoleMismatchError(null);
-                  }}
-                  className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
-                    selectedRole === 'STUDENT' && (identifier === 'student@hackarena.edu' || identifier === 'student@hackathon.com')
-                      ? 'border-indigo-500 bg-indigo-50/80 dark:bg-indigo-950/60 ring-1 ring-indigo-500/50'
-                      : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-white dark:bg-slate-800'
-                  }`}
-                >
-                  <div className="flex items-center gap-1 text-[11px] font-bold text-slate-800 dark:text-slate-200">
-                    <Code className="w-3 h-3 text-indigo-500" />
-                    <span>Student</span>
-                  </div>
-                  <p className="text-[10px] text-slate-400 font-mono truncate mt-0.5">student@hackarena.edu</p>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedRole('FACULTY');
-                    setIdentifier('faculty@hackarena.edu');
-                    setPassword('Pass@123');
-                    setRoleError(null);
-                    setIdentifierError(null);
-                    setPasswordError(null);
-                    setFormError(null);
-                    setRoleMismatchError(null);
-                  }}
-                  className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
-                    selectedRole === 'FACULTY' && (identifier === 'faculty@hackarena.edu' || identifier === 'faculty@hackathon.com')
-                      ? 'border-blue-500 bg-blue-50/80 dark:bg-blue-950/60 ring-1 ring-blue-500/50'
-                      : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-white dark:bg-slate-800'
-                  }`}
-                >
-                  <div className="flex items-center gap-1 text-[11px] font-bold text-slate-800 dark:text-slate-200">
-                    <GraduationCap className="w-3 h-3 text-blue-500" />
-                    <span>Faculty</span>
-                  </div>
-                  <p className="text-[10px] text-slate-400 font-mono truncate mt-0.5">faculty@hackarena.edu</p>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedRole('ADMIN');
-                    setIdentifier('admin@hackarena.edu');
-                    setPassword('Pass@123');
-                    setRoleError(null);
-                    setIdentifierError(null);
-                    setPasswordError(null);
-                    setFormError(null);
-                    setRoleMismatchError(null);
-                  }}
-                  className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
-                    selectedRole === 'ADMIN' && (identifier === 'admin@hackarena.edu' || identifier === 'admin@hackathon.com')
-                      ? 'border-purple-500 bg-purple-50/80 dark:bg-purple-950/60 ring-1 ring-purple-500/50'
-                      : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-white dark:bg-slate-800'
-                  }`}
-                >
-                  <div className="flex items-center gap-1 text-[11px] font-bold text-slate-800 dark:text-slate-200">
-                    <Shield className="w-3 h-3 text-purple-500" />
-                    <span>Admin</span>
-                  </div>
-                  <p className="text-[10px] text-slate-400 font-mono truncate mt-0.5">admin@hackarena.edu</p>
-                </button>
-              </div>
-            </div>
 
             {/* 3. MANUAL CREDENTIALS LOGIN FORM */}
             <form onSubmit={handleManualLogin} className="space-y-4">

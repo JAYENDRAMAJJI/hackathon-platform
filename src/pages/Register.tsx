@@ -78,6 +78,44 @@ export default function Register() {
   const [registeredData, setRegisteredData] = useState<any>(null);
   const [countdown, setCountdown] = useState(4);
 
+  // Quick Demo Autofill Helper
+  const handleQuickFillDemo = (role: Role = selectedRole) => {
+    setSelectedRole(role);
+    setFieldErrors({});
+    setFormError(null);
+    setPassword('Pass@123');
+    setConfirmPassword('Pass@123');
+    setAgreeTerms(true);
+
+    if (role === 'ADMIN') {
+      setName('Admin Director');
+      setEmail('director@hackarena.edu');
+      setUsername('admin_director');
+      setAdminEmployeeId('ADM-2026-01');
+      setAdminUnit('Platform Directorate');
+      setAdminDesignation('System Administrator');
+      setAdminCode('ADMIN2026');
+    } else if (role === 'FACULTY') {
+      setName('Dr. Robert Vance');
+      setEmail('vance@hackarena.edu');
+      setUsername('dr_vance');
+      setFacultyEmployeeId('FAC-2026-089');
+      setFacultyDepartment('Computer Science & Engineering');
+      setDesignation('Assistant Professor');
+      setSpecialization('Algorithms & Data Structures');
+    } else {
+      setName('Alex Morgan');
+      setEmail('alex.morgan@university.edu');
+      setUsername('alex_coder26');
+      setCollege('University Engineering Campus');
+      setDepartment('Computer Science & Engineering');
+      setRollNo('STU-2026-042');
+      setYearOfStudy('3rd Year');
+      setBatch('Batch A');
+      setPreferredLanguage('Kotlin');
+    }
+  };
+
   // Password Requirements Checker
   const passwordCriteria = useMemo(() => {
     return {
@@ -220,7 +258,7 @@ export default function Register() {
         payload.employeeId = adminEmployeeId.trim();
         payload.adminUnit = adminUnit.trim();
         payload.designation = adminDesignation.trim();
-        payload.adminCode = adminCode.trim() || 'ADMIN2026';
+        payload.adminCode = adminCode.trim();
       }
 
       const resp = await apiClient.post('/auth/register', payload);
@@ -439,6 +477,20 @@ export default function Register() {
                 </p>
               </div>
 
+              {/* Notice Banner for Existing Accounts */}
+              <div className="p-3.5 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/80 text-xs text-indigo-900 dark:text-indigo-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-indigo-500 shrink-0" />
+                  <span>Looking to sign in with pre-set demo accounts (Admin/Faculty/Student)?</span>
+                </div>
+                <Link
+                  to={`/login?role=${selectedRole}`}
+                  className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] shrink-0 text-center transition-all"
+                >
+                  Go to Sign In
+                </Link>
+              </div>
+
               {/* Error Banner */}
               {formError && (
                 <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 text-xs text-rose-700 dark:text-rose-300 flex items-start gap-2.5">
@@ -449,9 +501,19 @@ export default function Register() {
 
               {/* 1. ROLE SELECTION CARDS */}
               <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider block">
-                  1. Select Registration Role <span className="text-rose-500">*</span>
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider block">
+                    1. Select Registration Role <span className="text-rose-500">*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickFillDemo(selectedRole)}
+                    className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 px-2.5 py-1 rounded-lg border border-indigo-200 dark:border-indigo-800 transition-all cursor-pointer"
+                  >
+                    <Sparkles className="w-3 h-3 text-indigo-500" />
+                    <span>Auto-Fill Sample Data</span>
+                  </button>
+                </div>
 
                 <div className="grid grid-cols-3 gap-2.5">
                   {/* Student Card */}
@@ -849,7 +911,7 @@ export default function Register() {
                         {/* Admin Employee ID */}
                         <div className="space-y-1">
                           <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                            Admin ID <span className="text-rose-500">*</span>
+                            Admin Staff / Employee ID <span className="text-rose-500">*</span>
                           </label>
                           <div className="relative">
                             <Shield className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
@@ -860,7 +922,7 @@ export default function Register() {
                                 setAdminEmployeeId(e.target.value);
                                 clearFieldError('adminEmployeeId');
                               }}
-                              placeholder="e.g. ADM-2026-03"
+                              placeholder="e.g. ADM-2026-03 (Staff ID, not email)"
                               className={`w-full pl-10 pr-3.5 py-2 rounded-xl border text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 ${
                                 fieldErrors.adminEmployeeId
                                   ? 'border-rose-300 dark:border-rose-700 focus:ring-rose-500'
@@ -868,6 +930,9 @@ export default function Register() {
                               }`}
                             />
                           </div>
+                          <p className="text-[10px] text-slate-400 dark:text-slate-500">
+                            Enter an institutional ID format like ADM-2026-01 (use your email in Section 2 above).
+                          </p>
                           {fieldErrors.adminEmployeeId && (
                             <p className="text-[10px] text-rose-600 dark:text-rose-400">
                               {fieldErrors.adminEmployeeId}
@@ -899,7 +964,6 @@ export default function Register() {
                           <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                             Admin Authorization Passcode
                           </label>
-                          <span className="text-[10px] text-slate-400">Default key: ADMIN2026</span>
                         </div>
                         <div className="relative">
                           <KeyRound className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
@@ -907,7 +971,7 @@ export default function Register() {
                             type="password"
                             value={adminCode}
                             onChange={(e) => setAdminCode(e.target.value)}
-                            placeholder="Enter institutional admin passcode (ADMIN2026)"
+                            placeholder="Enter institutional admin authorization passcode"
                             className="w-full pl-10 pr-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-purple-500"
                           />
                         </div>
