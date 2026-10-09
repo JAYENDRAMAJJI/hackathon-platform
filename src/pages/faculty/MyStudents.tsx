@@ -26,11 +26,13 @@ import { apiClient } from '../../lib/api';
 import { User } from '../../types/admin';
 import { exportToCSV, formatDate } from '../../lib/exportUtils';
 import { useToast } from '../../context/AdminToastContext';
+import StudentDetailsDrawer from '../../components/faculty/StudentDetailsDrawer';
 
 export default function MyStudents() {
   const [students, setStudents] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedDrawerStudentId, setSelectedDrawerStudentId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [sessionStatusFilter, setSessionStatusFilter] = useState('');
@@ -280,16 +282,16 @@ export default function MyStudents() {
           <table className="w-full text-left text-sm text-slate-300">
             <thead className="bg-slate-800/90 text-xs font-bold uppercase tracking-wider text-slate-200 border-b border-slate-700">
               <tr>
-                <th className="p-4">Student Name & ID</th>
-                <th className="p-4">Department</th>
-                <th className="p-4">Session Status</th>
-                <th className="p-4 text-center">Current Level</th>
-                <th className="p-4 text-center">Score</th>
-                <th className="p-4 text-center">Rank</th>
-                <th className="p-4 text-center">Solved / Attempts</th>
-                <th className="p-4 text-center">Skipped</th>
-                <th className="p-4">Last Login</th>
-                <th className="p-4 text-right">Actions</th>
+                <th className="p-4 whitespace-nowrap">Student Name & ID</th>
+                <th className="p-4 whitespace-nowrap">Department</th>
+                <th className="p-4 whitespace-nowrap">Session Status</th>
+                <th className="p-4 text-center whitespace-nowrap">Current Level</th>
+                <th className="p-4 text-center whitespace-nowrap">Score</th>
+                <th className="p-4 text-center whitespace-nowrap">Rank</th>
+                <th className="p-4 text-center whitespace-nowrap">Attempts</th>
+                <th className="p-4 text-center whitespace-nowrap">Skipped</th>
+                <th className="p-4 whitespace-nowrap">Last Login</th>
+                <th className="p-4 text-center whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/70">
@@ -314,7 +316,7 @@ export default function MyStudents() {
                         <div className="min-w-0">
                           <p
                             className="font-bold text-white hover:text-indigo-400 cursor-pointer text-sm truncate"
-                            onClick={() => navigate(`/faculty/students/${student.id}`)}
+                            onClick={() => setSelectedDrawerStudentId(student.id)}
                           >
                             {student.name}
                           </p>
@@ -354,8 +356,8 @@ export default function MyStudents() {
                       </span>
                     </td>
 
-                    <td className="p-4 text-center">
-                      <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-950/60 text-indigo-300 border border-indigo-800/60">
+                    <td className="p-4 text-center whitespace-nowrap">
+                      <span className="inline-flex items-center justify-center whitespace-nowrap px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-950/60 text-indigo-300 border border-indigo-800/60">
                         Level {student.currentDifficulty || 1} / 10
                       </span>
                     </td>
@@ -368,11 +370,8 @@ export default function MyStudents() {
                       #{student.rank || '-'}
                     </td>
 
-                    <td className="p-4 text-center">
-                      <span className="font-bold text-emerald-400">
-                        {student.solvedCount || 0}
-                      </span>
-                      <span className="text-slate-400"> / {student.attemptsCount || 0}</span>
+                    <td className="p-4 text-center font-bold text-slate-200">
+                      {student.attemptsCount || 0}
                     </td>
 
                     <td className="p-4 text-center text-amber-400 font-bold">
@@ -386,37 +385,14 @@ export default function MyStudents() {
                       })}
                     </td>
 
-                    <td className="p-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          onClick={() => navigate(`/faculty/students/${student.id}`)}
-                          title="View Profile Details"
-                          className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-all shadow-xs"
-                        >
-                          <Eye className="w-3.5 h-3.5 text-indigo-400" />
-                        </button>
-                        <button
-                          onClick={() => navigate(`/faculty/students/${student.id}/performance`)}
-                          title="Performance Analytics"
-                          className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-all shadow-xs"
-                        >
-                          <LineChart className="w-3.5 h-3.5 text-blue-400" />
-                        </button>
-                        <button
-                          onClick={() => navigate(`/faculty/live-sessions/sess_${student.id}`)}
-                          title="Live Monitor"
-                          className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-all shadow-xs"
-                        >
-                          <Activity className="w-3.5 h-3.5 text-emerald-400" />
-                        </button>
-                        <button
-                          onClick={() => navigate(`/faculty/students/${student.id}/activity`)}
-                          title="Activity Timeline"
-                          className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-all shadow-xs"
-                        >
-                          <History className="w-3.5 h-3.5 text-purple-400" />
-                        </button>
-                      </div>
+                    <td className="p-4 text-center whitespace-nowrap">
+                      <button
+                        onClick={() => setSelectedDrawerStudentId(student.id)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600 hover:text-white border border-indigo-500/30 transition-all cursor-pointer shadow-xs active:scale-95"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        View Details
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -464,6 +440,13 @@ export default function MyStudents() {
           </div>
         )}
       </div>
+
+      {/* Student Supervision Dossier Drawer */}
+      <StudentDetailsDrawer
+        studentId={selectedDrawerStudentId}
+        isOpen={!!selectedDrawerStudentId}
+        onClose={() => setSelectedDrawerStudentId(null)}
+      />
     </div>
   );
 }

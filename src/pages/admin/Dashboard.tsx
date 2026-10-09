@@ -168,7 +168,7 @@ export default function AdminDashboard() {
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
           <QuickActionBtn icon={Users} label="User Access" path="/admin/users" color="blue" />
-          <QuickActionBtn icon={GraduationCap} label="Student Insights" path="/admin/students" color="cyan" />
+          <QuickActionBtn icon={GraduationCap} label="Student Management" path="/admin/students" color="cyan" />
           <QuickActionBtn icon={Briefcase} label="Faculty Management" path="/admin/faculty" color="purple" />
           <QuickActionBtn icon={UserCheck} label="Pending Approvals" path="/admin/approvals" color="amber" badge={users?.pendingApprovals} />
           <QuickActionBtn icon={PlusCircle} label="Create Contest" path="/admin/contests/create" color="indigo" />
@@ -406,7 +406,7 @@ export default function AdminDashboard() {
             </div>
           </Link>
 
-          {/* 2. Student Insights */}
+          {/* 2. Student Management */}
           <Link
             to="/admin/students"
             className="group p-5 rounded-2xl bg-slate-900 border border-slate-800 hover:border-cyan-500/50 hover:bg-slate-850/60 transition-all shadow-xl flex flex-col justify-between"
@@ -421,14 +421,14 @@ export default function AdminDashboard() {
                 </span>
               </div>
               <h3 className="text-base font-bold text-white mt-3 group-hover:text-cyan-400 transition-colors">
-                Student Insights
+                Student Management
               </h3>
               <p className="text-xs text-slate-400 mt-1 line-clamp-2">
-                Monitor student performance, attempts, progress, and session activity.
+                Monitor student performance, contest participation, progress, and session activity.
               </p>
             </div>
             <div className="pt-4 border-t border-slate-800/80 mt-4 flex items-center justify-between text-xs text-cyan-400 font-semibold">
-              <span>View Insights</span>
+              <span>Manage Students</span>
               <ArrowUpRight className="w-4 h-4 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
             </div>
           </Link>

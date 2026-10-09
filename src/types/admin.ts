@@ -26,6 +26,13 @@ export interface User {
   assignedFacultyId?: string;
   assignedFacultyName?: string;
   assignedStudentIds?: string[];
+  assignedContexts?: Array<{ id: string; name: string; status?: string; code?: string }>;
+  participationStatus?: string;
+  contextSubmissionsCount?: number;
+  contextSolvedCount?: number;
+  associatedStudents?: any[];
+  activeSessionsCount?: number;
+  supervisionStatus?: string;
 }
 
 export type ContestStatus = 'DRAFT' | 'SCHEDULED' | 'ACTIVE' | 'PAUSED' | 'ENDED' | 'CANCELLED';

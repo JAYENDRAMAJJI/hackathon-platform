@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Trophy,
   Clock,
@@ -23,6 +23,7 @@ import { Contest } from '../../types/admin';
 import { useToast } from '../../context/AdminToastContext';
 
 export default function ContestStatus() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [assignedContests, setAssignedContests] = useState<Contest[]>([]);
   const [selectedContestId, setSelectedContestId] = useState<string>('');
   const [contest, setContest] = useState<FacultyContestStatus | null>(null);
@@ -32,22 +33,86 @@ export default function ContestStatus() {
   const navigate = useNavigate();
   const { showToast } = useToast();
 
-  useEffect(() => {
-    const fetchContests = async () => {
-      try {
-        const resp = await apiClient.get('/faculty/contests');
-        if (resp.success && resp.data) {
-          setAssignedContests(resp.data);
-          if (resp.data.length > 0 && !selectedContestId) {
-            setSelectedContestId(resp.data[0].id);
+  const fetchContests = async () => {
+    try {
+      const resp = await apiClient.get('/faculty/contests');
+      if (resp.success && resp.data) {
+        const contests: Contest[] = resp.data;
+        setAssignedContests(contests);
+
+        const urlContestId = searchParams.get('contestId') || searchParams.get('contextId');
+        if (urlContestId) {
+          const isAssigned = contests.some((c) => c.id === urlContestId);
+          if (isAssigned) {
+            setSelectedContestId(urlContestId);
+          } else {
+            showToast('error', `Access Denied: You are not assigned to supervise contest context "${urlContestId}".`);
+            const newParams = new URLSearchParams(searchParams);
+            newParams.delete('contestId');
+            newParams.delete('contextId');
+            if (contests.length > 0) {
+              newParams.set('contestId', contests[0].id);
+              setSelectedContestId(contests[0].id);
+            } else {
+              setSelectedContestId('');
+            }
+            setSearchParams(newParams, { replace: true });
           }
+        } else if (contests.length > 0) {
+          setSelectedContestId((prev) => {
+            if (prev && contests.some((c) => c.id === prev)) return prev;
+            return contests[0].id;
+          });
+        } else {
+          setSelectedContestId('');
         }
-      } catch (err) {
-        console.error('Failed to load assigned contests:', err);
       }
-    };
+    } catch (err: any) {
+      console.error('Failed to load assigned contests:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchContests();
+
+    const handleUpdate = () => {
+      fetchContests();
+    };
+
+    window.addEventListener('faculty-contests-updated', handleUpdate);
+    return () => {
+      window.removeEventListener('faculty-contests-updated', handleUpdate);
+    };
   }, []);
+
+  useEffect(() => {
+    const urlContestId = searchParams.get('contestId') || searchParams.get('contextId');
+    if (!urlContestId || assignedContests.length === 0) return;
+
+    const isAssigned = assignedContests.some((c) => c.id === urlContestId);
+    if (!isAssigned) {
+      showToast('error', `Access Denied: You are not assigned to supervise contest context "${urlContestId}".`);
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete('contestId');
+      newParams.delete('contextId');
+      if (assignedContests.length > 0) {
+        newParams.set('contestId', assignedContests[0].id);
+        setSelectedContestId(assignedContests[0].id);
+      }
+      setSearchParams(newParams, { replace: true });
+    } else if (urlContestId !== selectedContestId) {
+      setSelectedContestId(urlContestId);
+    }
+  }, [searchParams, assignedContests]);
+
+  const handleContestChange = (newContestId: string) => {
+    setSelectedContestId(newContestId);
+    const newParams = new URLSearchParams(searchParams);
+    newParams.set('contestId', newContestId);
+    setSearchParams(newParams, { replace: true });
+  };
 
   const fetchContest = async (isManual = false) => {
     try {
@@ -58,15 +123,25 @@ export default function ContestStatus() {
         apiClient.get(`/faculty/contest-status${query}`),
         minDelay,
       ]);
+
+      if (resp && (resp.status === 403 || resp.error === 'FORBIDDEN' || (resp.message && resp.message.includes('Access Denied')))) {
+        showToast('error', resp.message || 'Access Denied: You are not assigned to supervise this contest.');
+        fetchContests();
+        return;
+      }
+
       if (resp.success && resp.data) {
         setContest(resp.data.contest);
       }
       if (isManual) {
         showToast('success', 'Contest arena telemetry synchronized');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load contest status:', err);
-      if (isManual) {
+      if (err?.response?.status === 403 || err?.status === 403) {
+        showToast('error', 'Access Denied: You do not have permission to inspect this contest.');
+        fetchContests();
+      } else if (isManual) {
         showToast('error', 'Failed to synchronize contest timer');
       }
     } finally {
@@ -114,13 +189,14 @@ export default function ContestStatus() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {assignedContests.length > 1 && (
+          {assignedContests.length > 1 ? (
             <div className="flex items-center gap-2 bg-slate-900 border border-slate-700 px-3 py-1.5 rounded-xl">
-              <span className="text-xs text-slate-400 font-semibold">Contest:</span>
+              <span className="text-xs text-slate-400 font-semibold">Context:</span>
               <select
+                id="faculty-contest-select"
                 value={selectedContestId}
-                onChange={(e) => setSelectedContestId(e.target.value)}
-                className="bg-transparent text-xs font-bold text-indigo-300 focus:outline-none"
+                onChange={(e) => handleContestChange(e.target.value)}
+                className="bg-transparent text-xs font-bold text-indigo-300 focus:outline-none cursor-pointer"
               >
                 {assignedContests.map((c) => (
                   <option key={c.id} value={c.id} className="bg-slate-900 text-white">
@@ -129,14 +205,21 @@ export default function ContestStatus() {
                 ))}
               </select>
             </div>
-          )}
+          ) : assignedContests.length === 1 ? (
+            <div className="flex items-center gap-2 bg-slate-900/90 border border-slate-700/80 px-3 py-1.5 rounded-xl">
+              <span className="text-xs text-slate-400 font-semibold">Context:</span>
+              <span className="text-xs font-bold text-indigo-300">
+                {assignedContests[0].name} ({assignedContests[0].code || assignedContests[0].accessCode || 'LIVE'})
+              </span>
+            </div>
+          ) : null}
 
           <Button
             variant="outline"
             size="sm"
             onClick={() => fetchContest(true)}
             disabled={refreshing}
-            className="text-xs font-semibold flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700 rounded-xl"
+            className="text-xs font-semibold flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700 rounded-xl cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
             Sync Timer

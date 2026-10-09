@@ -165,7 +165,7 @@ const TYPE_CONFIG: Record<
 
 const QUICK_ACTIONS = [
   { label: 'User Access', path: '/admin/users', icon: Users, desc: 'Manage user accounts, roles, permissions, approvals, and active sessions', color: 'text-blue-400' },
-  { label: 'Student Insights', path: '/admin/students', icon: GraduationCap, desc: 'Monitor student performance, attempts, progress, and session activity', color: 'text-cyan-400' },
+  { label: 'Student Management', path: '/admin/students', icon: GraduationCap, desc: 'Monitor student performance, contest participation, progress, and session activity', color: 'text-cyan-400' },
   { label: 'Faculty Management', path: '/admin/faculty', icon: Briefcase, desc: 'Manage faculty mentors, student batches, and supervisory activities', color: 'text-purple-400' },
   { label: 'Pending Approvals', path: '/admin/approvals', icon: UserCheck, desc: 'Review and approve student/faculty registrations and access requests', color: 'text-amber-400' },
   { label: 'Live Monitor', path: '/admin/live-sessions', icon: Activity, desc: 'Real-time telemetry & active participant sessions', color: 'text-emerald-400' },

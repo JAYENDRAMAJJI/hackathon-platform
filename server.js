@@ -308,8 +308,8 @@ var generateSeedContests = () => [
         department: "Information Technology"
       }
     ],
-    participantIds: Array.from({ length: 71 }, (_, i) => `usr_stu_${i + 1}`),
-    participantsCount: 71
+    participantIds: Array.from({ length: 45 }, (_, i) => `usr_stu_${i + 1}`),
+    participantsCount: 45
   },
   {
     id: "contest_3",
@@ -368,8 +368,8 @@ var generateSeedContests = () => [
         department: "Information Technology"
       }
     ],
-    participantIds: [],
-    participantsCount: 0
+    participantIds: Array.from({ length: 30 }, (_, i) => `usr_stu_${i + 1}`),
+    participantsCount: 30
   },
   {
     id: "contest_4",
@@ -1545,6 +1545,8 @@ var resolveUserFromToken = (token) => {
       if (user) return user;
     }
   } catch (_) {
+    const matchingUser = db.users.find((u) => token.includes(u.id));
+    if (matchingUser) return matchingUser;
     const cleanToken = token.toLowerCase();
     if (cleanToken.includes("admin") || token.includes("usr_admin")) {
       return db.users.find((u) => u.role === "ADMIN") || db.users[0];
@@ -1555,8 +1557,6 @@ var resolveUserFromToken = (token) => {
     if (cleanToken.includes("student") || token.includes("usr_stu")) {
       return db.users.find((u) => u.id === "usr_stu_3") || db.users.find((u) => u.role === "STUDENT" && u.approved);
     }
-    const matchingUser = db.users.find((u) => token.includes(u.id));
-    if (matchingUser) return matchingUser;
   }
   return null;
 };
@@ -1616,20 +1616,20 @@ var getFacultyAssignedStudents = (facultyUser) => {
 };
 var getFacultyAssignedContests = (facultyUser) => {
   if (facultyUser.role === "ADMIN") {
-    return db.contests;
+    return db.contests.filter((c) => c.status !== "DELETED");
   }
   return db.contests.filter(
-    (c) => Array.isArray(c.assignedFacultyIds) && c.assignedFacultyIds.includes(facultyUser.id) || Array.isArray(c.assignedFaculty) && c.assignedFaculty.some((f) => f.id === facultyUser.id)
+    (c) => c.status !== "DELETED" && (Array.isArray(c.assignedFacultyIds) && c.assignedFacultyIds.includes(facultyUser.id) || Array.isArray(c.assignedFaculty) && c.assignedFaculty.some((f) => f.id === facultyUser.id || f === facultyUser.id) || c.assignedFacultyId === facultyUser.id)
   );
 };
 var getFacultyTargetContest = (facultyUser, requestedContestId) => {
   const assigned = getFacultyAssignedContests(facultyUser);
   if (requestedContestId) {
-    const contest = db.contests.find((c) => c.id === requestedContestId);
+    const contest = db.contests.find((c) => c.id === requestedContestId && c.status !== "DELETED");
     if (!contest) {
       return { error: "NOT_FOUND", contest: null };
     }
-    const isAssigned = facultyUser.role === "ADMIN" || Array.isArray(contest.assignedFacultyIds) && contest.assignedFacultyIds.includes(facultyUser.id) || Array.isArray(contest.assignedFaculty) && contest.assignedFaculty.some((f) => f.id === facultyUser.id);
+    const isAssigned = facultyUser.role === "ADMIN" || Array.isArray(contest.assignedFacultyIds) && contest.assignedFacultyIds.includes(facultyUser.id) || Array.isArray(contest.assignedFaculty) && contest.assignedFaculty.some((f) => f.id === facultyUser.id || f === facultyUser.id) || contest.assignedFacultyId === facultyUser.id;
     if (!isAssigned) {
       return { error: "FORBIDDEN", contest: null };
     }
@@ -2299,8 +2299,26 @@ app.post("/api/admin/users/bulk-reject", authenticateAdmin, (req, res) => {
   res.json({ success: true, message: `Successfully rejected ${rejectedCount} users`, rejectedCount });
 });
 app.get("/api/admin/students", authenticateAdmin, (req, res) => {
-  const { search, difficulty, sessionStatus, sort } = req.query;
+  const { search, difficulty, sessionStatus, contextId, contestId } = req.query;
+  const selectedContextId = String(contextId || contestId || "ALL");
+  const contexts = db.contests.filter((c) => c.status !== "DELETED").map((c) => ({
+    id: c.id,
+    name: c.name,
+    code: c.code || c.accessCode,
+    status: c.status,
+    participantsCount: Array.isArray(c.participantIds) ? c.participantIds.length : c.participantsCount || 0
+  }));
   let students = db.users.filter((u) => u.role === "STUDENT");
+  let targetContest = null;
+  if (selectedContextId && selectedContextId !== "ALL") {
+    targetContest = db.contests.find(
+      (c) => c.id === selectedContextId || c.code === selectedContextId || c.name === selectedContextId
+    );
+    if (targetContest) {
+      const participantSet = new Set(targetContest.participantIds || []);
+      students = students.filter((s) => participantSet.has(s.id));
+    }
+  }
   if (search) {
     const q = String(search).toLowerCase();
     students = students.filter(
@@ -2313,23 +2331,81 @@ app.get("/api/admin/students", authenticateAdmin, (req, res) => {
   if (sessionStatus && sessionStatus !== "ALL") {
     students = students.filter((s) => s.sessionStatus === String(sessionStatus).toUpperCase());
   }
-  students.sort((a, b) => (b.score || 0) - (a.score || 0));
-  students.forEach((s, idx) => {
+  const mappedStudents = students.map((s) => {
+    const studentContexts = db.contests.filter((c) => c.status !== "DELETED" && Array.isArray(c.participantIds) && c.participantIds.includes(s.id)).map((c) => ({
+      id: c.id,
+      name: c.name,
+      code: c.code || c.accessCode,
+      status: c.status
+    }));
+    const allSubs = db.submissions.filter((sub) => sub.studentId === s.id);
+    let contextSubs = allSubs;
+    if (targetContest) {
+      contextSubs = allSubs.filter(
+        (sub) => sub.contestId === targetContest.id || Array.isArray(targetContest.questionIds) && targetContest.questionIds.includes(sub.questionId)
+      );
+    }
+    const contextSolved = contextSubs.filter((sub) => sub.result === "ACCEPTED").length;
+    let participationStatus = s.sessionStatus || "OFFLINE";
+    if (targetContest) {
+      if (s.sessionStatus === "ACTIVE") participationStatus = "ACTIVE";
+      else if (s.sessionStatus === "COMPLETED") participationStatus = "COMPLETED";
+      else if (contextSubs.length > 0) participationStatus = "ATTEMPTED";
+      else participationStatus = "REGISTERED";
+    }
+    return {
+      ...s,
+      assignedContexts: studentContexts,
+      contextsCount: studentContexts.length,
+      currentContextName: targetContest ? targetContest.name : studentContexts[0]?.name || "All Contexts",
+      participationStatus,
+      contextSubmissionsCount: contextSubs.length,
+      contextSolvedCount: contextSolved
+    };
+  });
+  mappedStudents.sort((a, b) => (b.score || 0) - (a.score || 0));
+  mappedStudents.forEach((s, idx) => {
     s.rank = idx + 1;
   });
-  res.json({ success: true, count: students.length, data: students });
+  res.json({
+    success: true,
+    count: mappedStudents.length,
+    selectedContextId,
+    selectedContext: targetContest ? { id: targetContest.id, name: targetContest.name, status: targetContest.status } : null,
+    contexts,
+    data: mappedStudents
+  });
 });
 app.get("/api/admin/students/:id", authenticateAdmin, (req, res) => {
   const student = db.users.find((u) => u.id === req.params.id && u.role === "STUDENT");
   if (!student) return res.status(404).json({ success: false, message: "Student not found" });
-  const submissions = db.submissions.filter((s) => s.studentId === student.id);
+  const { contextId, contestId } = req.query;
+  const selectedContextId = contextId || contestId;
+  let submissions = db.submissions.filter((s) => s.studentId === student.id);
+  if (selectedContextId && selectedContextId !== "ALL") {
+    const contest = db.contests.find((c) => c.id === selectedContextId || c.code === selectedContextId);
+    if (contest) {
+      submissions = submissions.filter(
+        (s) => s.contestId === contest.id || Array.isArray(contest.questionIds) && contest.questionIds.includes(s.questionId)
+      );
+    }
+  }
   const session = db.sessions.find((s) => s.studentId === student.id);
   const anomalies = db.anomalies.filter((a) => a.studentId === student.id);
   const activities = db.activityLogs.filter((a) => a.studentId === student.id);
+  const studentContexts = db.contests.filter((c) => c.status !== "DELETED" && Array.isArray(c.participantIds) && c.participantIds.includes(student.id)).map((c) => ({
+    id: c.id,
+    name: c.name,
+    code: c.code || c.accessCode,
+    status: c.status
+  }));
   res.json({
     success: true,
     data: {
-      profile: student,
+      profile: {
+        ...student,
+        assignedContexts: studentContexts
+      },
       session,
       submissions,
       anomalies,
@@ -2344,12 +2420,88 @@ app.get("/api/admin/students/:id", authenticateAdmin, (req, res) => {
   });
 });
 app.get("/api/admin/faculty", authenticateAdmin, (req, res) => {
-  const faculty = db.users.filter((u) => u.role === "FACULTY");
-  res.json({ success: true, count: faculty.length, data: faculty });
+  const { search, department, contextId, contestId } = req.query;
+  const selectedContextId = String(contextId || contestId || "ALL");
+  const contexts = db.contests.filter((c) => c.status !== "DELETED").map((c) => ({
+    id: c.id,
+    name: c.name,
+    code: c.code || c.accessCode,
+    status: c.status,
+    participantsCount: Array.isArray(c.participantIds) ? c.participantIds.length : c.participantsCount || 0,
+    assignedFacultyCount: Array.isArray(c.assignedFacultyIds) ? c.assignedFacultyIds.length : c.assignedFaculty?.length || 0
+  }));
+  let faculty = db.users.filter((u) => u.role === "FACULTY");
+  let targetContest = null;
+  if (selectedContextId && selectedContextId !== "ALL") {
+    targetContest = db.contests.find(
+      (c) => c.id === selectedContextId || c.code === selectedContextId || c.name === selectedContextId
+    );
+    if (targetContest) {
+      faculty = faculty.filter(
+        (f) => Array.isArray(targetContest.assignedFacultyIds) && targetContest.assignedFacultyIds.includes(f.id) || Array.isArray(targetContest.assignedFaculty) && targetContest.assignedFaculty.some((af) => af.id === f.id || af === f.id) || targetContest.assignedFacultyId === f.id
+      );
+    }
+  }
+  if (search) {
+    const q = String(search).toLowerCase();
+    faculty = faculty.filter(
+      (f) => f.name && f.name.toLowerCase().includes(q) || f.email && f.email.toLowerCase().includes(q) || f.employeeId && f.employeeId.toLowerCase().includes(q) || f.department && f.department.toLowerCase().includes(q)
+    );
+  }
+  if (department && department !== "ALL") {
+    faculty = faculty.filter((f) => f.department === String(department));
+  }
+  const mappedFaculty = faculty.map((f) => {
+    const facultyContexts = db.contests.filter(
+      (c) => c.status !== "DELETED" && (Array.isArray(c.assignedFacultyIds) && c.assignedFacultyIds.includes(f.id) || Array.isArray(c.assignedFaculty) && c.assignedFaculty.some((af) => af.id === f.id || af === f.id) || c.assignedFacultyId === f.id)
+    ).map((c) => ({
+      id: c.id,
+      name: c.name,
+      code: c.code || c.accessCode,
+      status: c.status,
+      participantsCount: Array.isArray(c.participantIds) ? c.participantIds.length : c.participantsCount || 0
+    }));
+    let assignedStudents = db.users.filter(
+      (u) => u.role === "STUDENT" && (u.assignedFacultyId === f.id || Array.isArray(f.assignedStudentIds) && f.assignedStudentIds.includes(u.id))
+    );
+    if (targetContest && Array.isArray(targetContest.participantIds)) {
+      const pSet = new Set(targetContest.participantIds);
+      assignedStudents = assignedStudents.filter((s) => pSet.has(s.id));
+    }
+    const activeSessionsCount = db.sessions.filter(
+      (sess) => assignedStudents.some((stu) => stu.id === sess.studentId) && (sess.sessionStatus === "ACTIVE" || sess.sessionStatus === "IDLE")
+    ).length;
+    const assignedStudentIds = assignedStudents.map((s) => s.id);
+    return {
+      ...f,
+      assignedContexts: facultyContexts,
+      assignedContextsCount: facultyContexts.length,
+      assignedStudentIds,
+      assignedStudentsCount: assignedStudents.length,
+      activeSessionsCount,
+      supervisionStatus: facultyContexts.some((c) => c.status === "ACTIVE") ? "ACTIVE_SUPERVISION" : "ASSIGNED",
+      associatedStudents: assignedStudents.slice(0, 30).map((s) => ({
+        id: s.id,
+        name: s.name,
+        email: s.email,
+        department: s.department,
+        score: s.score || 0,
+        sessionStatus: s.sessionStatus || "OFFLINE"
+      }))
+    };
+  });
+  res.json({
+    success: true,
+    count: mappedFaculty.length,
+    selectedContextId,
+    selectedContext: targetContest ? { id: targetContest.id, name: targetContest.name, status: targetContest.status } : null,
+    contexts,
+    data: mappedFaculty
+  });
 });
 app.post("/api/admin/faculty", authenticateAdmin, (req, res) => {
   const admin = req.user;
-  const { name, email, department, employeeId, password = "password" } = req.body;
+  const { name, email, department, employeeId, password = "password", contextIds } = req.body;
   if (!name || !email || !department) {
     return res.status(400).json({ success: false, message: "Name, email, and department are required" });
   }
@@ -2368,7 +2520,19 @@ app.post("/api/admin/faculty", authenticateAdmin, (req, res) => {
     assignedStudentIds: []
   };
   db.users.push(newFaculty);
+  if (Array.isArray(contextIds)) {
+    contextIds.forEach((cId) => {
+      const contest = db.contests.find((c) => c.id === cId);
+      if (contest) {
+        if (!Array.isArray(contest.assignedFacultyIds)) contest.assignedFacultyIds = [];
+        if (!contest.assignedFacultyIds.includes(newFaculty.id)) {
+          contest.assignedFacultyIds.push(newFaculty.id);
+        }
+      }
+    });
+  }
   logAudit(admin.id, admin.name, admin.role, "FACULTY_CREATED", `Created new faculty account for ${name} (${email})`);
+  broadcastEvent("FACULTY_UPDATED", { faculty: newFaculty });
   res.status(201).json({ success: true, message: "Faculty created successfully", data: newFaculty });
 });
 app.post("/api/admin/faculty/:id/assign-students", authenticateAdmin, (req, res) => {
@@ -2386,6 +2550,7 @@ app.post("/api/admin/faculty/:id/assign-students", authenticateAdmin, (req, res)
     }
   });
   logAudit(admin.id, admin.name, admin.role, "STUDENTS_ASSIGNED_FACULTY", `Assigned ${studentIds.length} students to faculty ${faculty.name}`);
+  broadcastEvent("FACULTY_ASSIGNED_STUDENTS", { facultyId: faculty.id, count: studentIds.length });
   res.json({ success: true, message: "Students successfully assigned to faculty", data: faculty });
 });
 app.get("/api/admin/contests", authenticateAdmin, (req, res) => {
@@ -2510,6 +2675,7 @@ app.post("/api/admin/contests", authenticateAdmin, (req, res) => {
   };
   db.contests.push(newContest);
   logAudit(admin.id, admin.name, admin.role, "CONTEST_CREATED", `Created contest: ${newContest.name} (Code: ${newContest.code}, Status: ${newContest.status})`);
+  broadcastEvent("CONTEST_UPDATED", { contestId: newContest.id, action: "CREATE" });
   res.status(201).json({ success: true, message: "Contest created successfully", data: newContest });
 });
 app.put("/api/admin/contests/:id", authenticateAdmin, (req, res) => {
@@ -2564,6 +2730,7 @@ app.put("/api/admin/contests/:id", authenticateAdmin, (req, res) => {
   }
   contest.participantsCount = contest.participantIds.length || contest.participantsCount || 0;
   logAudit(admin.id, admin.name, admin.role, "CONTEST_UPDATED", `Updated configuration for contest: ${contest.name}`);
+  broadcastEvent("CONTEST_ASSIGNMENT_UPDATED", { contestId: contest.id, assignedFacultyIds: contest.assignedFacultyIds });
   res.json({ success: true, message: "Contest updated successfully", data: contest });
 });
 app.post("/api/admin/contests/:id/assign-faculty", authenticateAdmin, (req, res) => {
@@ -2587,6 +2754,7 @@ app.post("/api/admin/contests/:id/assign-faculty", authenticateAdmin, (req, res)
   }));
   const facultyNames = contest.assignedFaculty.map((f) => f.name).join(", ") || "None";
   logAudit(admin.id, admin.name, admin.role, "FACULTY_ASSIGNED_CONTEST", `Assigned faculty [${facultyNames}] to contest: ${contest.name}`);
+  broadcastEvent("CONTEST_ASSIGNMENT_UPDATED", { contestId: contest.id, assignedFacultyIds: contest.assignedFacultyIds });
   res.json({
     success: true,
     message: `Faculty successfully assigned to ${contest.name}`,
@@ -2820,6 +2988,7 @@ app.delete("/api/admin/contests/:id", authenticateAdmin, (req, res) => {
   if (index === -1) return res.status(404).json({ success: false, message: "Contest not found" });
   const deleted = db.contests.splice(index, 1)[0];
   logAudit(admin.id, admin.name, admin.role, "CONTEST_DELETED", `Deleted draft contest: ${deleted.name}`);
+  broadcastEvent("CONTEST_UPDATED", { contestId: deleted.id, action: "DELETE" });
   res.json({ success: true, message: "Contest deleted successfully" });
 });
 app.get("/api/admin/questions", authenticateAuthUser, (req, res) => {
@@ -3141,7 +3310,7 @@ var getLeaderboardFilterMeta = (userRole, userId) => {
     contests = contests.filter((c) => c.isPublished !== false && c.leaderboardVisible !== false);
   } else if (userRole === "FACULTY" && userId) {
     contests = contests.filter(
-      (c) => c.assignedFacultyIds && c.assignedFacultyIds.includes(userId) || c.assignedFaculty && c.assignedFaculty.some((f) => f.id === userId) || c.isPublished !== false
+      (c) => c.status !== "DELETED" && (Array.isArray(c.assignedFacultyIds) && c.assignedFacultyIds.includes(userId) || Array.isArray(c.assignedFaculty) && c.assignedFaculty.some((f) => f.id === userId || f === userId) || c.assignedFacultyId === userId)
     );
   }
   const contexts = contests.map((c) => ({
@@ -3322,12 +3491,11 @@ app.get(["/api/leaderboard/filters", "/api/leaderboard/contexts"], (req, res) =>
   let userId = void 0;
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith("Bearer ")) {
-    try {
-      const token = authHeader.split(" ")[1];
-      const decoded = jwt.verify(token, JWT_SECRET);
-      role = decoded?.role;
-      userId = decoded?.id;
-    } catch {
+    const token = authHeader.split(" ")[1];
+    const user = resolveUserFromToken(token);
+    if (user) {
+      role = user.role;
+      userId = user.id;
     }
   }
   const filters = getLeaderboardFilterMeta(role, userId);
@@ -4068,6 +4236,17 @@ app.get("/api/faculty/contests", authenticateFaculty, (req, res) => {
     data: assignedContests
   });
 });
+app.get("/api/faculty/contests/:id", authenticateFaculty, (req, res) => {
+  const fac = req.user;
+  const { error, contest } = getFacultyTargetContest(fac, req.params.id);
+  if (error === "FORBIDDEN") {
+    return res.status(403).json({ success: false, message: "Access Denied: You are not assigned to supervise this contest." });
+  }
+  if (error === "NOT_FOUND") {
+    return res.status(404).json({ success: false, message: "Contest not found." });
+  }
+  res.json({ success: true, data: contest });
+});
 app.get("/api/faculty/dashboard-kpis", authenticateFaculty, (req, res) => {
   const fac = req.user;
   const requestedContestId = req.query.contestId;
@@ -4079,8 +4258,10 @@ app.get("/api/faculty/dashboard-kpis", authenticateFaculty, (req, res) => {
     return res.status(404).json({ success: false, message: "Contest not found." });
   }
   const assignedStudents = getFacultyAssignedStudents(fac);
-  const assignedIds = new Set(assignedStudents.map((s) => s.id));
-  const activeStudents = assignedStudents.filter((s) => s.sessionStatus === "ACTIVE").length;
+  const contestParticipantIds = contest?.participantIds ? new Set(contest.participantIds) : null;
+  const filteredStudents = contestParticipantIds && contestParticipantIds.size > 0 ? assignedStudents.filter((s) => contestParticipantIds.has(s.id)) : assignedStudents;
+  const assignedIds = new Set(filteredStudents.map((s) => s.id));
+  const activeStudents = filteredStudents.filter((s) => s.sessionStatus === "ACTIVE").length;
   const completedStudents = assignedStudents.filter((s) => s.sessionStatus === "COMPLETED").length;
   const inactiveStudents = assignedStudents.filter((s) => s.sessionStatus === "OFFLINE" || s.sessionStatus === "IDLE").length;
   const activeSessions = db.sessions.filter(
@@ -4232,6 +4413,16 @@ app.get(["/api/faculty/contest-status", "/api/faculty/contest/status"], authenti
 });
 app.get("/api/faculty/recent-activity", authenticateFaculty, (req, res) => {
   const fac = req.user;
+  const requestedContestId = req.query.contestId;
+  if (requestedContestId) {
+    const { error } = getFacultyTargetContest(fac, requestedContestId);
+    if (error === "FORBIDDEN") {
+      return res.status(403).json({ success: false, message: "Access Denied: You are not assigned to supervise this contest." });
+    }
+    if (error === "NOT_FOUND") {
+      return res.status(404).json({ success: false, message: "Contest not found." });
+    }
+  }
   const assignedStudents = getFacultyAssignedStudents(fac);
   const assignedIds = new Set(assignedStudents.map((s) => s.id));
   const activities = db.activityLogs.filter((a) => assignedIds.has(a.studentId)).slice(0, 15);
@@ -4239,6 +4430,16 @@ app.get("/api/faculty/recent-activity", authenticateFaculty, (req, res) => {
 });
 app.get("/api/faculty/alerts", authenticateFaculty, (req, res) => {
   const fac = req.user;
+  const requestedContestId = req.query.contestId;
+  if (requestedContestId) {
+    const { error } = getFacultyTargetContest(fac, requestedContestId);
+    if (error === "FORBIDDEN") {
+      return res.status(403).json({ success: false, message: "Access Denied: You are not assigned to supervise this contest." });
+    }
+    if (error === "NOT_FOUND") {
+      return res.status(404).json({ success: false, message: "Contest not found." });
+    }
+  }
   const assignedStudents = getFacultyAssignedStudents(fac);
   const assignedIds = new Set(assignedStudents.map((s) => s.id));
   const alerts = [];
@@ -4617,9 +4818,19 @@ app.patch("/api/faculty/anomalies/:id/review", authenticateFaculty, (req, res) =
 });
 app.get("/api/faculty/leaderboard", authenticateFaculty, (req, res) => {
   const fac = req.user;
+  const { contextId, contestId, filterKey } = req.query;
+  const targetContestId = contextId || contestId || (filterKey && filterKey !== "ALL" ? filterKey.replace("contest:", "") : void 0);
+  if (targetContestId) {
+    const { error } = getFacultyTargetContest(fac, targetContestId);
+    if (error === "FORBIDDEN") {
+      return res.status(403).json({ success: false, message: "Access Denied: You are not assigned to supervise this contest context." });
+    }
+    if (error === "NOT_FOUND") {
+      return res.status(404).json({ success: false, message: "Contest context not found." });
+    }
+  }
   const assignedStudents = getFacultyAssignedStudents(fac);
   const assignedIds = new Set(assignedStudents.map((s) => s.id));
-  const { contextId, contestId, filterKey } = req.query;
   const leaderboard = getFilteredLeaderboardStandings({
     contextId,
     contestId,
@@ -4637,11 +4848,20 @@ app.get("/api/faculty/leaderboard", authenticateFaculty, (req, res) => {
 });
 app.get("/api/faculty/submissions", authenticateFaculty, (req, res) => {
   const fac = req.user;
+  const { verdict, search, studentId, contextId, contestId } = req.query;
+  const selectedContextId = contextId || contestId;
+  if (selectedContextId) {
+    const { error } = getFacultyTargetContest(fac, selectedContextId);
+    if (error === "FORBIDDEN") {
+      return res.status(403).json({ success: false, message: "Access Denied: You are not assigned to supervise this contest context." });
+    }
+    if (error === "NOT_FOUND") {
+      return res.status(404).json({ success: false, message: "Contest context not found." });
+    }
+  }
   const assignedStudents = getFacultyAssignedStudents(fac);
   const assignedIds = new Set(assignedStudents.map((s) => s.id));
   let submissions = db.submissions.filter((s) => assignedIds.has(s.studentId));
-  const { verdict, search, studentId, contextId, contestId } = req.query;
-  const selectedContextId = contextId || contestId;
   if (selectedContextId && selectedContextId !== "ALL") {
     const contest = db.contests.find(
       (c) => c.id === selectedContextId || c.code === selectedContextId || c.name === selectedContextId || c.code && c.code.toLowerCase() === selectedContextId.toLowerCase()
@@ -4698,13 +4918,27 @@ app.get("/api/faculty/submissions/:submissionId", authenticateFaculty, (req, res
 });
 app.get("/api/faculty/analytics/performance", authenticateFaculty, (req, res) => {
   const fac = req.user;
+  const requestedContestId = req.query.contestId;
+  let targetContest = null;
+  if (requestedContestId) {
+    const { error, contest } = getFacultyTargetContest(fac, requestedContestId);
+    if (error === "FORBIDDEN") {
+      return res.status(403).json({ success: false, message: "Access Denied: You are not assigned to supervise this contest." });
+    }
+    if (error === "NOT_FOUND") {
+      return res.status(404).json({ success: false, message: "Contest not found." });
+    }
+    targetContest = contest;
+  }
   const assignedStudents = getFacultyAssignedStudents(fac);
-  const assignedIds = new Set(assignedStudents.map((s) => s.id));
-  const totalScore = assignedStudents.reduce((acc, s) => acc + (s.score || 0), 0);
-  const avgScore = assignedStudents.length ? Math.round(totalScore / assignedStudents.length) : 0;
-  const totalSolved = assignedStudents.reduce((acc, s) => acc + (s.solvedCount || 0), 0);
-  const totalAttempts = assignedStudents.reduce((acc, s) => acc + (s.attemptsCount || 0), 0);
-  const totalSkips = assignedStudents.reduce((acc, s) => acc + (s.skippedCount || 0), 0);
+  const contestParticipantIds = targetContest?.participantIds ? new Set(targetContest.participantIds) : null;
+  const filteredStudents = contestParticipantIds && contestParticipantIds.size > 0 ? assignedStudents.filter((s) => contestParticipantIds.has(s.id)) : assignedStudents;
+  const assignedIds = new Set(filteredStudents.map((s) => s.id));
+  const totalScore = filteredStudents.reduce((acc, s) => acc + (s.score || 0), 0);
+  const avgScore = filteredStudents.length ? Math.round(totalScore / filteredStudents.length) : 0;
+  const totalSolved = filteredStudents.reduce((acc, s) => acc + (s.solvedCount || 0), 0);
+  const totalAttempts = filteredStudents.reduce((acc, s) => acc + (s.attemptsCount || 0), 0);
+  const totalSkips = filteredStudents.reduce((acc, s) => acc + (s.skippedCount || 0), 0);
   const overallSuccessRate = totalAttempts ? Math.round(totalSolved / totalAttempts * 100) : 0;
   res.json({
     success: true,
@@ -4720,11 +4954,11 @@ app.get("/api/faculty/analytics/performance", authenticateFaculty, (req, res) =>
       },
       charts: {
         scoreDistribution: [
-          { range: "0-100", count: assignedStudents.filter((s) => (s.score || 0) < 100).length },
-          { range: "101-250", count: assignedStudents.filter((s) => (s.score || 0) >= 101 && (s.score || 0) <= 250).length },
-          { range: "251-400", count: assignedStudents.filter((s) => (s.score || 0) >= 251 && (s.score || 0) <= 400).length },
-          { range: "401-600", count: assignedStudents.filter((s) => (s.score || 0) >= 401 && (s.score || 0) <= 600).length },
-          { range: "600+", count: assignedStudents.filter((s) => (s.score || 0) > 600).length }
+          { range: "0-100", count: filteredStudents.filter((s) => (s.score || 0) < 100).length },
+          { range: "101-250", count: filteredStudents.filter((s) => (s.score || 0) >= 101 && (s.score || 0) <= 250).length },
+          { range: "251-400", count: filteredStudents.filter((s) => (s.score || 0) >= 251 && (s.score || 0) <= 400).length },
+          { range: "401-600", count: filteredStudents.filter((s) => (s.score || 0) >= 401 && (s.score || 0) <= 600).length },
+          { range: "600+", count: filteredStudents.filter((s) => (s.score || 0) > 600).length }
         ],
         performanceOverTime: [
           { minute: "15m", avgScore: 35, submissionsCount: 18 },
@@ -4748,6 +4982,16 @@ app.get("/api/faculty/analytics/performance", authenticateFaculty, (req, res) =>
 });
 app.get("/api/faculty/analytics/questions", authenticateFaculty, (req, res) => {
   const fac = req.user;
+  const requestedContestId = req.query.contestId;
+  if (requestedContestId) {
+    const { error } = getFacultyTargetContest(fac, requestedContestId);
+    if (error === "FORBIDDEN") {
+      return res.status(403).json({ success: false, message: "Access Denied: You are not assigned to supervise this contest." });
+    }
+    if (error === "NOT_FOUND") {
+      return res.status(404).json({ success: false, message: "Contest not found." });
+    }
+  }
   const assignedStudents = getFacultyAssignedStudents(fac);
   const assignedIds = new Set(assignedStudents.map((s) => s.id));
   const questionsAnalytics = db.questions.map((q) => {
@@ -4773,11 +5017,25 @@ app.get("/api/faculty/analytics/questions", authenticateFaculty, (req, res) => {
 });
 app.get("/api/faculty/analytics/difficulty", authenticateFaculty, (req, res) => {
   const fac = req.user;
+  const requestedContestId = req.query.contestId;
+  let targetContest = null;
+  if (requestedContestId) {
+    const { error, contest } = getFacultyTargetContest(fac, requestedContestId);
+    if (error === "FORBIDDEN") {
+      return res.status(403).json({ success: false, message: "Access Denied: You are not assigned to supervise this contest." });
+    }
+    if (error === "NOT_FOUND") {
+      return res.status(404).json({ success: false, message: "Contest not found." });
+    }
+    targetContest = contest;
+  }
   const assignedStudents = getFacultyAssignedStudents(fac);
+  const contestParticipantIds = targetContest?.participantIds ? new Set(targetContest.participantIds) : null;
+  const filteredStudents = contestParticipantIds && contestParticipantIds.size > 0 ? assignedStudents.filter((s) => contestParticipantIds.has(s.id)) : assignedStudents;
   const levels = Array.from({ length: 10 }, (_, i) => i + 1);
   const matrix = levels.map((lvl) => {
     const questionsAtLvl = db.questions.filter((q) => q.difficulty === lvl);
-    const studentsAtLvl = assignedStudents.filter((s) => s.currentDifficulty === lvl).length;
+    const studentsAtLvl = filteredStudents.filter((s) => s.currentDifficulty === lvl).length;
     const baseAttempts = questionsAtLvl.reduce((acc, q) => acc + (q.attemptsCount || 0), 0);
     const avgSuccess = questionsAtLvl.length ? Math.round(questionsAtLvl.reduce((acc, q) => acc + (q.successRate || 50), 0) / questionsAtLvl.length) : 50;
     return {

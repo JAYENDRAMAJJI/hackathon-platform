@@ -55,6 +55,13 @@ export default function FacultyLeaderboard() {
         apiClient.get('/faculty/leaderboard', { filterKey: currentKey, contextId: currentKey }),
         minDelay,
       ]);
+
+      if (resp && (resp.status === 403 || resp.error === 'FORBIDDEN' || (resp.message && resp.message.includes('Access Denied')))) {
+        toast.error(resp.message || 'Access Denied: You are not assigned to supervise this contest context.');
+        setFilterKey('ALL');
+        return;
+      }
+
       if (resp.success && resp.data) {
         setStandings(resp.data);
       }
@@ -66,9 +73,14 @@ export default function FacultyLeaderboard() {
       if (isManual) {
         toast.success('Live arena leaderboard refreshed');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load leaderboard:', err);
-      toast.error('Failed to load leaderboard data. Please try again.');
+      if (err?.response?.status === 403 || err?.status === 403) {
+        toast.error('Access Denied: You are not assigned to supervise this contest context.');
+        setFilterKey('ALL');
+      } else {
+        toast.error('Failed to load leaderboard data. Please try again.');
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -77,6 +89,16 @@ export default function FacultyLeaderboard() {
 
   useEffect(() => {
     fetchLeaderboard(false, filterKey);
+  }, [filterKey]);
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      fetchLeaderboard(false, filterKey);
+    };
+    window.addEventListener('faculty-contests-updated', handleUpdate);
+    return () => {
+      window.removeEventListener('faculty-contests-updated', handleUpdate);
+    };
   }, [filterKey]);
 
   const handleFilterChange = (newKey: string) => {

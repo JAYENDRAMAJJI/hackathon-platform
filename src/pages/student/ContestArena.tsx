@@ -31,6 +31,12 @@ import {
   AlertCircle,
   ShieldAlert,
   FastForward,
+  Search,
+  Filter,
+  Calendar,
+  Users,
+  Eye,
+  X,
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
@@ -49,6 +55,19 @@ export default function ContestArena() {
   });
   const navigate = useNavigate();
   const toast = useToast();
+
+  // Contests Overview State (when !contestIdParam)
+  const [contestsList, setContestsList] = useState<any[]>([]);
+  const [loadingContests, setLoadingContests] = useState(false);
+  const [contestsError, setContestsError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'IN_PROGRESS' | 'AVAILABLE' | 'UPCOMING' | 'COMPLETED'>('ALL');
+  const [sortBy, setSortBy] = useState<'priority' | 'name' | 'duration'>('priority');
+  const [codeModalContest, setCodeModalContest] = useState<any | null>(null);
+  const [joinModalCode, setJoinModalCode] = useState('');
+  const [isJoiningWithCode, setIsJoiningWithCode] = useState(false);
+  const [quickJoinCode, setQuickJoinCode] = useState('');
+  const [activeContestBannerInfo, setActiveContestBannerInfo] = useState<any | null>(null);
 
   // Active Contest Conflict State (Single Active Contest Rule Enforcement)
   const [activeContestConflict, setActiveContestConflict] = useState<{
@@ -135,8 +154,75 @@ export default function ContestArena() {
     return null;
   };
 
+  // 1b. Fetch Complete Contests Directory (When !contestIdParam)
+  const fetchAllContests = async () => {
+    try {
+      setLoadingContests(true);
+      setContestsError(null);
+      const params = new URLSearchParams();
+      if (searchQuery.trim()) params.set('search', searchQuery.trim());
+      if (statusFilter !== 'ALL') params.set('status', statusFilter);
+      if (sortBy !== 'priority') params.set('sort', sortBy);
+
+      const qs = params.toString() ? `?${params.toString()}` : '';
+      const resp = await apiClient.get(`/student/contests${qs}`);
+      if (resp.success) {
+        setContestsList(resp.data || []);
+        if (resp.activeContest) {
+          setActiveContestBannerInfo(resp.activeContest);
+        } else {
+          setActiveContestBannerInfo(null);
+        }
+      }
+    } catch (err: any) {
+      console.error('Failed to fetch contests:', err);
+      setContestsError(err.message || 'Failed to load competitions list');
+    } finally {
+      setLoadingContests(false);
+    }
+  };
+
+  // 1c. Join Contest with Code from Overview
+  const handleJoinWithCodeModal = async (codeToJoin: string, cId?: string) => {
+    if (!codeToJoin.trim()) {
+      toast.error('Please enter a valid contest access code.');
+      return;
+    }
+    setIsJoiningWithCode(true);
+    try {
+      const resp = await apiClient.post('/student/contests/join', {
+        contestId: cId,
+        code: codeToJoin.trim(),
+      });
+      if (resp.success && resp.data) {
+        toast.success(resp.message || 'Contest unlocked successfully!');
+        setCodeModalContest(null);
+        setJoinModalCode('');
+        setQuickJoinCode('');
+        navigate(`/student/contest?contestId=${resp.data.id || resp.data.contestId}&preview=true`);
+      }
+    } catch (err: any) {
+      console.error('Join contest error:', err);
+      if (err.code === 'ACTIVE_CONTEST_EXISTS' || err.status === 409) {
+        const targetId = err.data?.data?.activeContestId || err.data?.activeContestId;
+        const targetName = err.data?.data?.activeContestName || err.data?.activeContestName || 'Active Competition';
+        setActiveContestConflict({
+          activeContestId: targetId,
+          activeContestName: targetName,
+          timeRemainingSeconds: err.data?.data?.timeRemainingSeconds,
+        });
+        toast.error(`You already have an active contest ("${targetName}"). You cannot enter another contest.`);
+      } else {
+        toast.error(err.message || 'Failed to join contest with code.');
+      }
+    } finally {
+      setIsJoiningWithCode(false);
+    }
+  };
+
   // 2. Synchronize Active Contest Session State
   const syncContestSession = async () => {
+    if (!contestIdParam) return;
     try {
       setSessionState('LOADING');
       setUnjoinedError(null);
@@ -154,17 +240,13 @@ export default function ContestArena() {
             });
             return;
           }
-          if (!contestIdParam) {
-            navigate(`/student/contest?contestId=${currentActive.id}`, { replace: true });
-            return;
-          }
         }
       } catch (checkErr) {
         console.warn('Active contest check skipped:', checkErr);
       }
 
       // Check contest state from backend
-      const stateUrl = contestIdParam ? `/student/contest/state?contestId=${contestIdParam}` : '/student/contest/state';
+      const stateUrl = `/student/contest/state?contestId=${contestIdParam}`;
       const stateResp = await apiClient.get(stateUrl);
 
       if (stateResp.success && stateResp.data) {
@@ -199,7 +281,7 @@ export default function ContestArena() {
           setRemainingSkips(Math.max(0, 3 - d.session.skippedCount));
         }
         setSessionState('ACTIVE');
-        const cId = d.contest?.id || contestIdParam || 'contest_1';
+        const cId = d.contest?.id || contestIdParam;
         const rawQList = d.questions || [];
         const qList = rawQList.map((q: any) => {
           const isLocallySolved = localStorage.getItem(`contest_${cId}_solved_${q.id}`) === 'true';
@@ -221,7 +303,6 @@ export default function ContestArena() {
         // Load active question code draft
         const activeQ = qList[curIdx];
         if (activeQ) {
-          const cId = d.contest?.id || contestIdParam || 'contest_1';
           const savedDraft = localStorage.getItem(`draft_code_${cId}_${activeQ.id}`);
           setCode(savedDraft || activeQ.starterCode || 'class Solution {\n    // Write Kotlin solution here\n}');
         }
@@ -258,7 +339,52 @@ export default function ContestArena() {
   };
 
   useEffect(() => {
-    syncContestSession();
+    if (!contestIdParam) {
+      fetchAllContests();
+    } else {
+      syncContestSession();
+    }
+  }, [contestIdParam, statusFilter, sortBy]);
+
+  // Debounced search for overview directory
+  useEffect(() => {
+    if (!contestIdParam) {
+      const timer = setTimeout(() => {
+        fetchAllContests();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [searchQuery]);
+
+  // Real-time synchronization via Server-Sent Events (SSE)
+  useEffect(() => {
+    let es: EventSource | null = null;
+    try {
+      es = new EventSource('/api/events');
+      es.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          const relevantTypes = [
+            'CONTEST_CREATED',
+            'CONTEST_UPDATED',
+            'CONTEST_ENDED',
+            'CONTEST_SESSION_STARTED',
+            'CONTEST_SESSION_COMPLETED',
+          ];
+          if (relevantTypes.includes(payload.type)) {
+            if (!contestIdParam) {
+              fetchAllContests();
+            } else if (payload.type === 'CONTEST_ENDED' && payload.data?.contestId === contestIdParam) {
+              toast.error('The competition administrator has ended this contest.');
+              syncContestSession();
+            }
+          }
+        } catch (e) {}
+      };
+    } catch (e) {}
+    return () => {
+      if (es) es.close();
+    };
   }, [contestIdParam]);
 
   useEffect(() => {
@@ -270,6 +396,34 @@ export default function ContestArena() {
       setViewingDetailsFirst(true);
     }
   }, [searchParams]);
+
+  // Network connection telemetry monitoring
+  useEffect(() => {
+    const handleOffline = () => {
+      const cId = arenaData?.contest?.id || contestIdParam || 'contest_1';
+      apiClient.post('/student/contest/telemetry-event', {
+        contestId: cId,
+        eventType: 'CONNECTION_LOST',
+        details: 'Client connection interrupted / offline state detected.',
+      }).catch(() => {});
+    };
+
+    const handleOnline = () => {
+      const cId = arenaData?.contest?.id || contestIdParam || 'contest_1';
+      apiClient.post('/student/contest/telemetry-event', {
+        contestId: cId,
+        eventType: 'CONNECTION_RESTORED',
+        details: 'Client connection restored. Reconnected to arena server.',
+      }).catch(() => {});
+    };
+
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', handleOnline);
+    return () => {
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [arenaData, contestIdParam]);
 
   // 3. Start Contest Action (Triggered from Question Paper Preview Confirmation)
   const handleStartContest = async () => {
@@ -330,6 +484,14 @@ export default function ContestArena() {
       setCode(saved || nextQ.starterCode || 'class Solution {\n    // Write Kotlin solution here\n}');
       setResult(null);
       setActiveTab('problem');
+
+      // Dispatch authoritative question opened event to activity timeline
+      apiClient.post('/student/contest/question-opened', {
+        contestId: cId,
+        questionId: nextQ.id,
+        questionNumber: newIndex + 1,
+        previousQuestionId: currentQ?.id,
+      }).catch(() => {});
     }
   };
 
@@ -652,6 +814,16 @@ export default function ContestArena() {
             </button>
 
             <button
+              onClick={() => {
+                setActiveContestConflict(null);
+                navigate('/student/contest');
+              }}
+              className="w-full py-2.5 text-xs text-emerald-400 hover:text-emerald-300 font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Layers className="w-3.5 h-3.5" /> Return to Contests Directory
+            </button>
+
+            <button
               onClick={() => navigate('/student/dashboard')}
               className="w-full py-2.5 text-xs text-slate-400 hover:text-white font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
             >
@@ -659,6 +831,492 @@ export default function ContestArena() {
             </button>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  // ==========================================
+  // RENDER STATE: CONTESTS OVERVIEW DIRECTORY (WHEN NO SPECIFIC CONTEST IS SELECTED)
+  // ==========================================
+  if (!contestIdParam) {
+    return (
+      <div className="space-y-6 animate-in fade-in duration-300 font-sans text-white pb-12">
+        {/* Top Header & Refresh */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-800">
+          <div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20 mb-2">
+              <Trophy className="w-3.5 h-3.5" />
+              <span>Hackathon Arena 2.0</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+              Contest Arena Directory
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-2xl">
+              Browse all official hackathons, departmental challenges, and competitive rounds available to you. Select any challenge to review rules, begin your attempt, or resume an ongoing competition.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 self-start sm:self-center">
+            <button
+              onClick={() => fetchAllContests()}
+              disabled={loadingContests}
+              className="h-10 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-sm disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loadingContests ? 'animate-spin text-blue-400' : ''}`} />
+              <span>Refresh Directory</span>
+            </button>
+          </div>
+        </div>
+
+        {/* ACTIVE CONTEST ALERT BANNER (IF ACTIVE CONTEST RUNNING) */}
+        {activeContestBannerInfo && (
+          <div className="p-5 rounded-2xl bg-gradient-to-r from-emerald-950/70 via-slate-900 to-slate-900 border border-emerald-500/50 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4 animate-in slide-in-from-top-2">
+            <div className="flex items-start md:items-center gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0 shadow-lg shadow-emerald-500/10">
+                <Play className="w-6 h-6 fill-emerald-400" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 animate-pulse">
+                    Active Attempt in Progress
+                  </span>
+                  <span className="text-xs text-slate-400">Authoritative Countdown Running</span>
+                </div>
+                <h3 className="text-lg font-black text-white mt-0.5">
+                  {activeContestBannerInfo.name}
+                </h3>
+                <p className="text-xs text-slate-300">
+                  Your competition countdown is active. Resume your attempt to write, test, and submit your code before time expires.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 shrink-0">
+              <button
+                onClick={() => navigate(`/student/contest?contestId=${activeContestBannerInfo.id}`)}
+                className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs px-6 py-3 rounded-xl shadow-lg shadow-emerald-600/30 flex items-center gap-2 cursor-pointer transition-all"
+              >
+                <Play className="w-4 h-4 fill-white" />
+                Resume Active Contest
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* QUICK ACCESS CODE BAR */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 font-bold shrink-0">
+              <KeyRound className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                Have a Private Contest Access Code?
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Enter your invitation code to register and enter assigned departmental contests.
+              </p>
+            </div>
+          </div>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleJoinWithCodeModal(quickJoinCode);
+            }}
+            className="flex items-center gap-2 w-full sm:w-auto"
+          >
+            <input
+              type="text"
+              value={quickJoinCode}
+              onChange={(e) => setQuickJoinCode(e.target.value.toUpperCase())}
+              placeholder="e.g. HACK2026"
+              className="w-full sm:w-48 px-3.5 py-2.5 bg-slate-800 border border-amber-500/30 rounded-xl text-amber-300 font-mono font-bold text-xs uppercase tracking-wider focus:outline-none focus:border-amber-400 placeholder:text-slate-500 transition-colors"
+            />
+            <Button
+              type="submit"
+              disabled={isJoiningWithCode || !quickJoinCode.trim()}
+              className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs px-4 py-2.5 rounded-xl whitespace-nowrap shadow-md cursor-pointer transition-colors"
+            >
+              {isJoiningWithCode ? 'Verifying...' : 'Unlock Arena'}
+            </Button>
+          </form>
+        </div>
+
+        {/* SEARCH, STATUS FILTER TABS & SORTING */}
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-slate-900/60 border border-slate-800/80 p-3 rounded-2xl">
+          {/* Search Input */}
+          <div className="relative flex-1 max-w-md">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search competitions by title or keywords..."
+              className="w-full pl-10 pr-4 py-2 bg-slate-800 border border-slate-700/80 rounded-xl text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+            />
+          </div>
+
+          {/* Status Filter Tabs */}
+          <div className="flex items-center gap-1 overflow-x-auto py-1 scrollbar-none">
+            {[
+              { id: 'ALL', label: 'All Contests' },
+              { id: 'IN_PROGRESS', label: 'In Progress' },
+              { id: 'AVAILABLE', label: 'Open / Available' },
+              { id: 'UPCOMING', label: 'Upcoming' },
+              { id: 'COMPLETED', label: 'Completed' },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setStatusFilter(tab.id as any)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                  statusFilter === tab.id
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Sort Selector */}
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 hidden xl:inline">Sort:</span>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as any)}
+              className="bg-slate-800 border border-slate-700 text-slate-200 text-xs font-semibold rounded-xl px-3 py-2 focus:outline-none focus:border-blue-500 cursor-pointer"
+            >
+              <option value="priority">Status Priority</option>
+              <option value="name">Contest Name (A-Z)</option>
+              <option value="duration">Duration (Shortest)</option>
+            </select>
+          </div>
+        </div>
+
+        {/* LOADING STATE */}
+        {loadingContests && contestsList.length === 0 && (
+          <div className="py-16 text-center text-slate-400 bg-slate-900 border border-slate-800 rounded-3xl">
+            <div className="inline-block w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin mb-3" />
+            <h3 className="text-base font-bold text-white">Loading Contests Directory...</h3>
+            <p className="text-xs text-slate-400 mt-1">Retrieving published hackathons from authoritative server.</p>
+          </div>
+        )}
+
+        {/* ERROR STATE */}
+        {contestsError && (
+          <div className="p-6 bg-rose-950/40 border border-rose-500/40 rounded-2xl text-rose-300 text-center space-y-3">
+            <AlertCircle className="w-8 h-8 text-rose-400 mx-auto" />
+            <p className="text-sm font-bold">{contestsError}</p>
+            <Button
+              onClick={() => fetchAllContests()}
+              className="bg-rose-600 hover:bg-rose-500 text-white text-xs px-4 py-2 rounded-xl"
+            >
+              Retry Loading
+            </Button>
+          </div>
+        )}
+
+        {/* EMPTY STATE */}
+        {!loadingContests && !contestsError && contestsList.length === 0 && (
+          <div className="py-16 bg-slate-900 border border-slate-800 rounded-3xl text-center text-slate-400 p-8 shadow-xl">
+            <Trophy className="w-12 h-12 text-slate-700 mx-auto mb-3" />
+            <h3 className="text-lg font-bold text-white">No Competitions Found</h3>
+            <p className="text-xs text-slate-400 max-w-md mx-auto mt-1">
+              {searchQuery || statusFilter !== 'ALL'
+                ? 'No published contests matched your filter or search criteria. Try resetting filters.'
+                : 'There are currently no published contests scheduled for your cohort. Check back soon or unlock a private session with an access key.'}
+            </p>
+            {(searchQuery || statusFilter !== 'ALL') && (
+              <button
+                onClick={() => {
+                  setSearchQuery('');
+                  setStatusFilter('ALL');
+                }}
+                className="mt-4 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+              >
+                Clear Search & Filters
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* CONTESTS CARDS GRID */}
+        {!loadingContests && contestsList.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {contestsList.map((c) => {
+              const isThisActive = c.isThisActive;
+              const isEnrolled = c.isEnrolled || c.isJoined;
+              const hasActiveContest = c.hasActiveContest;
+              const isCompleted = c.attemptStatus === 'COMPLETED';
+              const isExpired = c.attemptStatus === 'EXPIRED';
+              const isEnded = c.globalStatus === 'ENDED' || c.globalStatus === 'CLOSED';
+              const isUpcoming = c.globalStatus === 'UPCOMING';
+
+              return (
+                <div
+                  key={c.id}
+                  className={`bg-slate-900 border rounded-3xl p-6 shadow-xl flex flex-col justify-between transition-all group ${
+                    isThisActive
+                      ? 'border-emerald-500/70 shadow-emerald-950/20 ring-1 ring-emerald-500/40 bg-gradient-to-b from-slate-900 to-emerald-950/20'
+                      : isCompleted
+                      ? 'border-purple-500/30 hover:border-purple-500/50'
+                      : isEnded
+                      ? 'border-slate-800/80 opacity-90'
+                      : 'border-slate-800 hover:border-blue-500/50'
+                  }`}
+                >
+                  <div className="space-y-4">
+                    {/* Status Badges Header */}
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {/* Global Contest Status Badge */}
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold tracking-wide uppercase ${
+                            c.globalStatus === 'IN_PROGRESS'
+                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                              : c.globalStatus === 'AVAILABLE'
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                              : c.globalStatus === 'UPCOMING'
+                              ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
+                              : 'bg-slate-800 text-slate-400 border border-slate-700'
+                          }`}
+                        >
+                          {c.globalStatus === 'IN_PROGRESS' && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
+                          )}
+                          {c.globalStatus === 'IN_PROGRESS'
+                            ? 'In Progress'
+                            : c.globalStatus === 'AVAILABLE'
+                            ? 'Open / Available'
+                            : c.globalStatus === 'UPCOMING'
+                            ? 'Upcoming'
+                            : c.globalStatus === 'ENDED'
+                            ? 'Ended'
+                            : 'Closed'}
+                        </span>
+
+                        {/* Student Attempt Status Badge */}
+                        <span
+                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                            c.attemptStatus === 'IN_PROGRESS'
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 animate-pulse'
+                              : c.attemptStatus === 'COMPLETED'
+                              ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                              : c.attemptStatus === 'EXPIRED'
+                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                              : 'bg-slate-800/80 text-slate-400 border border-slate-700'
+                          }`}
+                        >
+                          {c.attemptStatus === 'IN_PROGRESS' && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                          )}
+                          {c.attemptStatus === 'IN_PROGRESS'
+                            ? 'Active Attempt'
+                            : c.attemptStatus === 'COMPLETED'
+                            ? 'Attempt Completed'
+                            : c.attemptStatus === 'EXPIRED'
+                            ? 'Attempt Expired'
+                            : 'Not Started'}
+                        </span>
+
+                        {/* Enrollment Badge */}
+                        {isEnrolled && (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
+                            <CheckCircle2 className="w-3 h-3" /> Enrolled
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Title & Description */}
+                    <div>
+                      <h3 className="font-black text-lg text-white group-hover:text-blue-400 transition-colors">
+                        {c.name}
+                      </h3>
+                      <p className="text-xs text-slate-400 leading-relaxed mt-1 line-clamp-2">
+                        {c.description || 'Departmental programming tournament and algorithmic challenge.'}
+                      </p>
+                    </div>
+
+                    {/* Performance Summary Pill if participated */}
+                    {(isCompleted || isExpired) && (
+                      <div className="grid grid-cols-3 gap-2 p-3 rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-center">
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-bold uppercase block">Score</span>
+                          <span className="text-base font-black text-amber-400 font-mono mt-0.5 block">{c.score || 0} pts</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-bold uppercase block">Solved</span>
+                          <span className="text-base font-black text-emerald-400 font-mono mt-0.5 block">{c.solvedCount || 0}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-bold uppercase block">Rank</span>
+                          <span className="text-base font-black text-blue-400 font-mono mt-0.5 block">#{c.rank || 1}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Meta Info Pills */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 text-[11px] text-slate-400 font-medium">
+                      <div className="flex items-center gap-1.5 bg-slate-950/50 p-2 rounded-xl border border-slate-800/80">
+                        <Clock className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                        <span>{c.durationMinutes || 120} Minutes</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 bg-slate-950/50 p-2 rounded-xl border border-slate-800/80">
+                        <Code2 className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                        <span>{c.questionCount || 5} Questions</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 bg-slate-950/50 p-2 rounded-xl border border-slate-800/80 col-span-2 sm:col-span-1">
+                        <Award className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        <span>{c.maxPoints || 100} Points Max</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons Row */}
+                  <div className="pt-5 mt-5 border-t border-slate-800/80 flex items-center justify-between gap-3">
+                    <button
+                      onClick={() => navigate(`/student/contest?contestId=${c.id}&preview=true`)}
+                      className="text-xs text-slate-400 hover:text-white font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Guidelines & Rules</span>
+                    </button>
+
+                    {/* Primary Action Button */}
+                    {isThisActive ? (
+                      <button
+                        onClick={() => navigate(`/student/contest?contestId=${c.id}`)}
+                        className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs px-5 py-2.5 rounded-xl shadow-lg shadow-emerald-600/25 flex items-center gap-2 cursor-pointer transition-all"
+                      >
+                        <Play className="w-3.5 h-3.5 fill-white" />
+                        <span>Resume Contest</span>
+                      </button>
+                    ) : hasActiveContest ? (
+                      <button
+                        onClick={() => {
+                          setActiveContestConflict({
+                            activeContestId: c.activeContestId,
+                            activeContestName: c.activeContestName,
+                          });
+                        }}
+                        className="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-amber-300 border border-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all"
+                        title="You have another active contest in progress"
+                      >
+                        <Lock className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Active Session Running</span>
+                      </button>
+                    ) : isCompleted || isExpired ? (
+                      <button
+                        onClick={() => navigate(`/student/contest?contestId=${c.id}`)}
+                        className="bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all"
+                      >
+                        <Eye className="w-3.5 h-3.5 text-purple-400" />
+                        <span>View Results</span>
+                      </button>
+                    ) : isEnded ? (
+                      <button
+                        disabled
+                        className="bg-slate-900 border border-slate-800 text-slate-500 text-xs font-bold px-4 py-2.5 rounded-xl cursor-not-allowed"
+                      >
+                        Contest Ended
+                      </button>
+                    ) : isUpcoming ? (
+                      <button
+                        disabled
+                        className="bg-slate-800/60 border border-slate-700 text-slate-400 text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 cursor-not-allowed"
+                      >
+                        <Clock className="w-3.5 h-3.5 text-blue-400" />
+                        <span>Upcoming</span>
+                      </button>
+                    ) : isEnrolled ? (
+                      <button
+                        onClick={() => navigate(`/student/contest?contestId=${c.id}`)}
+                        className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs px-5 py-2.5 rounded-xl shadow-lg shadow-blue-600/25 flex items-center gap-2 cursor-pointer transition-all"
+                      >
+                        <Play className="w-3.5 h-3.5 fill-white" />
+                        <span>Enter Arena</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setCodeModalContest(c);
+                          setJoinModalCode(c.code || '');
+                        }}
+                        className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5 shadow-md shadow-amber-500/20 cursor-pointer transition-all"
+                      >
+                        <KeyRound className="w-3.5 h-3.5" />
+                        <span>Join with Code</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* MODAL: JOIN SPECIFIC CONTEST WITH ACCESS CODE */}
+        {codeModalContest && (
+          <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 font-bold shrink-0">
+                    <KeyRound className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-white text-base">Enter Contest Access Code</h3>
+                    <p className="text-xs text-slate-400">{codeModalContest.name}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCodeModalContest(null)}
+                  className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
+                  Contest Access Code
+                </label>
+                <input
+                  type="text"
+                  autoFocus
+                  value={joinModalCode}
+                  onChange={(e) => setJoinModalCode(e.target.value.toUpperCase())}
+                  placeholder="e.g. HACK2026"
+                  className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-center font-mono font-black text-lg tracking-widest text-amber-300 uppercase focus:outline-none focus:border-amber-400 transition-colors"
+                />
+                <p className="text-[11px] text-slate-400 text-center">
+                  Verify with your faculty coordinator or contest administrator if you need a passkey.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setCodeModalContest(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={isJoiningWithCode || !joinModalCode.trim()}
+                  onClick={() => handleJoinWithCodeModal(joinModalCode, codeModalContest.id)}
+                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-lg shadow-blue-600/25 cursor-pointer disabled:opacity-50 transition-all"
+                >
+                  {isJoiningWithCode ? 'Verifying...' : 'Verify & Enter Arena'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -751,7 +1409,7 @@ export default function ContestArena() {
           newParams.delete('mode');
           setSearchParams(newParams, { replace: true });
         }}
-        onBackToContests={() => navigate('/student/dashboard')}
+        onBackToContests={() => navigate('/student/contest')}
         isStarting={isStarting}
       />
     );
@@ -824,10 +1482,17 @@ export default function ContestArena() {
               <Trophy className="w-4 h-4 mr-2 text-amber-400" /> Contest Standings
             </Button>
             <Button
-              onClick={() => navigate('/student/dashboard')}
-              className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-6 py-2.5 rounded-xl shadow-lg shadow-blue-600/25 cursor-pointer"
+              onClick={() => navigate('/student/contest')}
+              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs px-6 py-2.5 rounded-xl shadow-lg shadow-blue-600/25 cursor-pointer"
             >
-              Back to Dashboard
+              <Layers className="w-4 h-4 mr-2" /> Back to Contests Overview
+            </Button>
+            <Button
+              onClick={() => navigate('/student/dashboard')}
+              variant="secondary"
+              className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs px-5 py-2.5 rounded-xl cursor-pointer"
+            >
+              Student Dashboard
             </Button>
           </div>
         </div>
@@ -862,15 +1527,17 @@ export default function ContestArena() {
       {/* 1. TOP COMMAND BAR: CONTEST TITLE, TIMER & GLOBAL CONTROLS */}
       <div className="h-14 bg-slate-950 text-white flex items-center justify-between px-6 border-b border-slate-800 shrink-0 shadow-md">
         <div className="flex items-center gap-3 min-w-0">
-          <span className="text-xs font-bold uppercase tracking-wider text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2.5 py-1 rounded-full truncate hidden sm:inline">
+          <button
+            type="button"
+            onClick={() => navigate('/student/contest')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 text-xs font-semibold transition-all cursor-pointer shrink-0"
+            title="Return to Contests Overview"
+          >
+            <Layers className="w-3.5 h-3.5 text-blue-400" />
+            <span className="hidden sm:inline">Contests Overview</span>
+          </button>
+          <span className="text-xs sm:text-sm font-bold uppercase tracking-wider text-blue-400 bg-blue-500/10 border border-blue-500/20 px-3 py-1 rounded-full truncate">
             {contest.name}
-          </span>
-          <span className="text-slate-600 hidden sm:inline">•</span>
-          <span className="font-extrabold text-sm sm:text-base text-white truncate max-w-sm">
-            Q{activeQuestionIndex + 1}: {currentQuestion?.title || 'Algorithmic Problem'}
-          </span>
-          <span className="text-xs text-amber-400 font-mono font-bold bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">
-            {currentQuestion?.marks || 20} pts
           </span>
         </div>
 

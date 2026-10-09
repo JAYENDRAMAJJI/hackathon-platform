@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Bell,
@@ -6,11 +6,6 @@ import {
   Trash2,
   Check,
   AlertTriangle,
-  Clock,
-  Shield,
-  Trophy,
-  Activity,
-  Layers,
   RefreshCw,
   ExternalLink,
 } from 'lucide-react';
@@ -26,7 +21,7 @@ export default function Notifications() {
 
   const toast = useToast();
 
-  const fetchNotifications = async (isManual = false) => {
+  const fetchNotifications = useCallback(async (isManual = false) => {
     setLoading(true);
     try {
       const minDelay = isManual ? new Promise((r) => setTimeout(r, 600)) : Promise.resolve();
@@ -40,56 +35,81 @@ export default function Notifications() {
       if (isManual) {
         toast.success('System notifications refreshed');
       }
-    } catch (err: any) {
+    } catch {
       toast.error('Failed to load notifications');
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
   useEffect(() => {
     fetchNotifications();
-  }, []);
+  }, [fetchNotifications]);
 
-  const handleMarkRead = async (id: string) => {
+  useEffect(() => {
+    const unread = notifications.filter((n) => !n.read).length;
+    window.dispatchEvent(
+      new CustomEvent('admin-notifications-updated', {
+        detail: { unreadCount: unread },
+      })
+    );
+  }, [notifications]);
+
+  const handleMarkRead = useCallback(async (id: string) => {
+    // Optimistic update for instant counter refresh
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+    );
     try {
       const resp = await apiClient.post(`/admin/notifications/${id}/read`);
-      if (resp.success) {
-        setNotifications((prev) =>
-          prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-        );
+      if (!resp.success) {
+        fetchNotifications();
       }
-    } catch (err: any) {
+    } catch {
       toast.error('Failed to mark read');
+      fetchNotifications();
     }
-  };
+  }, [fetchNotifications, toast]);
 
-  const handleMarkAllRead = async () => {
+  const handleMarkAllRead = useCallback(async () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
     try {
       const resp = await apiClient.post('/admin/notifications/mark-all-read');
       if (resp.success) {
         toast.success('All notifications marked as read');
-        setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+      } else {
+        fetchNotifications();
       }
-    } catch (err: any) {
+    } catch {
       toast.error('Failed to update notifications');
+      fetchNotifications();
     }
-  };
+  }, [fetchNotifications, toast]);
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = useCallback(async (id: string) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
     try {
       const resp = await apiClient.delete(`/admin/notifications/${id}`);
       if (resp.success) {
-        setNotifications((prev) => prev.filter((n) => n.id !== id));
         toast.info('Notification removed');
+      } else {
+        fetchNotifications();
       }
-    } catch (err: any) {
+    } catch {
       toast.error('Failed to delete notification');
+      fetchNotifications();
     }
-  };
+  }, [fetchNotifications, toast]);
 
-  const filtered = filter === 'UNREAD' ? notifications.filter((n) => !n.read) : notifications;
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const unreadCount = useMemo(
+    () => notifications.filter((n) => !n.read).length,
+    [notifications]
+  );
+
+  const filtered = useMemo(
+    () => (filter === 'UNREAD' ? notifications.filter((n) => !n.read) : notifications),
+    [filter, notifications]
+  );
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto animate-in fade-in duration-300 pb-16">
@@ -108,7 +128,7 @@ export default function Notifications() {
           {unreadCount > 0 && (
             <button
               onClick={handleMarkAllRead}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 transition-all shadow-sm"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 transition-all shadow-sm cursor-pointer"
             >
               <Check className="w-4 h-4 text-emerald-400" /> Mark All Read
             </button>
@@ -128,15 +148,15 @@ export default function Notifications() {
       <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 p-1.5 rounded-2xl shadow-xl w-fit">
         <button
           onClick={() => setFilter('ALL')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
             filter === 'ALL' ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20' : 'text-slate-400 hover:text-white'
           }`}
         >
-          All Alerts ({notifications.length})
+          All Alerts ({unreadCount})
         </button>
         <button
           onClick={() => setFilter('UNREAD')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
             filter === 'UNREAD' ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20' : 'text-slate-400 hover:text-white'
           }`}
         >
@@ -163,9 +183,14 @@ export default function Notifications() {
             return (
               <div
                 key={n.id}
+                onClick={() => {
+                  if (isUnread) {
+                    handleMarkRead(n.id);
+                  }
+                }}
                 className={`p-5 rounded-2xl border transition-all flex items-start justify-between gap-4 ${
                   isUnread
-                    ? 'bg-slate-900/95 border-blue-500/40 shadow-lg shadow-blue-500/5'
+                    ? 'bg-slate-900/95 border-blue-500/40 shadow-lg shadow-blue-500/5 hover:border-blue-500/60 cursor-pointer'
                     : 'bg-slate-900/60 border-slate-800 hover:bg-slate-900'
                 }`}
               >
@@ -197,6 +222,11 @@ export default function Notifications() {
                       {n.link && (
                         <Link
                           to={n.link}
+                          onClick={() => {
+                            if (isUnread) {
+                              handleMarkRead(n.id);
+                            }
+                          }}
                           className="text-blue-400 hover:text-blue-300 font-semibold flex items-center gap-1"
                         >
                           View Action <ExternalLink className="w-3 h-3" />
@@ -206,11 +236,14 @@ export default function Notifications() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1 shrink-0">
+                <div
+                  className="flex items-center gap-1 shrink-0"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   {isUnread && (
                     <button
                       onClick={() => handleMarkRead(n.id)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
                       title="Mark as Read"
                     >
                       <Check className="w-4 h-4 text-emerald-400" />
@@ -218,7 +251,7 @@ export default function Notifications() {
                   )}
                   <button
                     onClick={() => handleDelete(n.id)}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800"
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors cursor-pointer"
                     title="Delete Notification"
                   >
                     <Trash2 className="w-4 h-4" />

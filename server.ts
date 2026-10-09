@@ -4,6 +4,7 @@ import cors from 'cors';
 import bodyParser from 'body-parser';
 import jwt from 'jsonwebtoken';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 
@@ -318,8 +319,8 @@ const generateSeedContests = () => [
         department: 'Information Technology',
       },
     ],
-    participantIds: Array.from({ length: 71 }, (_, i) => `usr_stu_${i + 1}`),
-    participantsCount: 71,
+    participantIds: Array.from({ length: 45 }, (_, i) => `usr_stu_${i + 1}`),
+    participantsCount: 45,
   },
   {
     id: 'contest_3',
@@ -378,8 +379,8 @@ const generateSeedContests = () => [
         department: 'Information Technology',
       },
     ],
-    participantIds: [],
-    participantsCount: 0,
+    participantIds: Array.from({ length: 30 }, (_, i) => `usr_stu_${i + 1}`),
+    participantsCount: 30,
   },
   {
     id: 'contest_4',
@@ -1507,7 +1508,48 @@ const db = {
 // Initialize dependent collections
 db.sessions = generateSeedSessions(db.users, db.questions);
 db.submissions = generateSeedSubmissions(db.users, db.questions);
-db.activityLogs = generateSeedActivity(db.users);
+// Activity Storage Persistence on Disk
+const ACTIVITY_STORAGE_FILE = path.resolve(process.cwd(), 'data', 'activity_logs.json');
+
+const loadPersistedActivities = (): any[] => {
+  try {
+    if (fs.existsSync(ACTIVITY_STORAGE_FILE)) {
+      const content = fs.readFileSync(ACTIVITY_STORAGE_FILE, 'utf-8');
+      const parsed = JSON.parse(content);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (err) {
+    console.warn('[ActivityStorage] Failed to read activity storage, using defaults:', err);
+  }
+  return [];
+};
+
+let persistTimer: NodeJS.Timeout | null = null;
+const savePersistedActivities = () => {
+  if (persistTimer) return;
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
+    try {
+      const dataDir = path.dirname(ACTIVITY_STORAGE_FILE);
+      if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+      }
+      fs.writeFileSync(ACTIVITY_STORAGE_FILE, JSON.stringify(db.activityLogs.slice(0, 2000), null, 2), 'utf-8');
+    } catch (err) {
+      console.error('[ActivityStorage] Failed to save activities to disk:', err);
+    }
+  }, 250);
+};
+
+const persistedLogs = loadPersistedActivities();
+if (persistedLogs.length > 0) {
+  db.activityLogs = persistedLogs;
+} else {
+  db.activityLogs = generateSeedActivity(db.users);
+  savePersistedActivities();
+}
 
 // SSE Real-Time Event Stream Clients
 const sseClients: express.Response[] = [];
@@ -1520,6 +1562,251 @@ const broadcastEvent = (eventType: string, payload: any) => {
       client.write(`data: ${data}\n\n`);
     } catch (_) {}
   });
+};
+
+// Activity Event Recording Service
+interface RecordActivityParams {
+  studentId: string;
+  studentName?: string;
+  studentEmail?: string;
+  contestId?: string;
+  contestName?: string;
+  sessionId?: string;
+  questionId?: string;
+  questionTitle?: string;
+  questionNumber?: number;
+  action: string;
+  status?: 'SUCCESS' | 'FAILED' | 'WARNING' | 'INFO' | 'ACCEPTED' | 'REJECTED' | 'ERROR';
+  details: string;
+  ipAddress?: string;
+  device?: string;
+  metadata?: Record<string, any>;
+}
+
+const recordActivityEvent = (params: RecordActivityParams) => {
+  const student = db.users.find((u) => u.id === params.studentId);
+  const studentName = params.studentName || student?.name || 'Student Candidate';
+  const studentEmail = params.studentEmail || student?.email || '';
+
+  const contest = params.contestId ? db.contests.find((c) => c.id === params.contestId) : (db.contests.find((c) => c.status === 'ACTIVE') || db.contests[0]);
+  const contestId = params.contestId || contest?.id || 'contest_1';
+  const contestName = params.contestName || contest?.name || 'Hackathon Arena 2026';
+
+  const session = params.sessionId ? db.sessions.find((s) => s.id === params.sessionId) : db.sessions.find((s) => s.studentId === params.studentId && s.contestId === contestId);
+  const sessionId = params.sessionId || session?.id || `sess_${params.studentId}`;
+
+  let questionTitle = params.questionTitle;
+  if (!questionTitle && params.questionId) {
+    const q = db.questions.find((item) => item.id === params.questionId);
+    if (q) questionTitle = q.title;
+  }
+
+  const now = new Date().toISOString();
+
+  // Deduplication guard: ignore exact duplicate action within 1500ms for the same student and question
+  const lastEvent = db.activityLogs[0];
+  if (
+    lastEvent &&
+    lastEvent.studentId === params.studentId &&
+    lastEvent.action === params.action &&
+    lastEvent.questionId === params.questionId &&
+    Date.now() - new Date(lastEvent.timestamp).getTime() < 1500
+  ) {
+    return lastEvent;
+  }
+
+  const record = {
+    id: `act_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    timestamp: now,
+    studentId: params.studentId,
+    studentName,
+    studentEmail,
+    contestId,
+    contestName,
+    sessionId,
+    questionId: params.questionId,
+    questionTitle,
+    questionNumber: params.questionNumber,
+    action: params.action,
+    activity: params.action, // alias for backwards compatibility
+    status: params.status || 'INFO',
+    details: params.details,
+    ipAddress: params.ipAddress || '127.0.0.1',
+    device: params.device || 'Windows 11 / Chrome 124.0',
+    metadata: params.metadata || {},
+  };
+
+  db.activityLogs.unshift(record);
+
+  if (db.activityLogs.length > 5000) {
+    db.activityLogs.length = 5000;
+  }
+
+  savePersistedActivities();
+
+  broadcastEvent('ACTIVITY_RECORDED', record);
+  return record;
+};
+
+// Activity Timeline Query Engine
+interface TimelineFilterOptions {
+  allowedStudentIds?: Set<string>;
+  studentId?: string;
+  contestId?: string;
+  sessionId?: string;
+  action?: string;
+  eventType?: string;
+  status?: string;
+  questionId?: string;
+  search?: string;
+  startDate?: string;
+  endDate?: string;
+  sortOrder?: 'asc' | 'desc';
+  page?: number;
+  limit?: number;
+}
+
+const queryActivityTimeline = (options: TimelineFilterOptions) => {
+  let logs = [...db.activityLogs];
+
+  if (options.allowedStudentIds) {
+    logs = logs.filter((l) => options.allowedStudentIds!.has(l.studentId));
+  }
+
+  if (options.studentId && options.studentId !== 'ALL') {
+    logs = logs.filter((l) => l.studentId === options.studentId);
+  }
+
+  if (options.contestId && options.contestId !== 'ALL') {
+    logs = logs.filter((l) => l.contestId === options.contestId);
+  }
+
+  if (options.sessionId && options.sessionId !== 'ALL') {
+    logs = logs.filter((l) => l.sessionId === options.sessionId);
+  }
+
+  const actionFilter = options.action || options.eventType;
+  if (actionFilter && actionFilter !== 'ALL') {
+    const target = actionFilter.toUpperCase().trim();
+    logs = logs.filter((l) => {
+      const act = (l.action || l.activity || '').toUpperCase().trim();
+      if (act === target) return true;
+      if (target === 'SUBMISSION' && act.startsWith('SUBMISSION')) return true;
+      if (target === 'QUESTION' && act.startsWith('QUESTION')) return true;
+      if (target === 'CODE_EXECUTION' && (act.includes('RUN') || act.includes('COMPILATION'))) return true;
+      if (target === 'CONTEST' && act.startsWith('CONTEST')) return true;
+      return false;
+    });
+  }
+
+  if (options.status && options.status !== 'ALL') {
+    const targetStatus = options.status.toUpperCase().trim();
+    logs = logs.filter((l) => {
+      const s = (l.status || '').toUpperCase().trim();
+      return s === targetStatus;
+    });
+  }
+
+  if (options.questionId && options.questionId !== 'ALL') {
+    const qTerm = options.questionId.toLowerCase();
+    logs = logs.filter((l) => l.questionId === options.questionId || (l.questionTitle && l.questionTitle.toLowerCase().includes(qTerm)));
+  }
+
+  if (options.startDate) {
+    const startMs = new Date(options.startDate).getTime();
+    if (!isNaN(startMs)) {
+      logs = logs.filter((l) => new Date(l.timestamp).getTime() >= startMs);
+    }
+  }
+  if (options.endDate) {
+    const endMs = new Date(options.endDate).getTime();
+    if (!isNaN(endMs)) {
+      logs = logs.filter((l) => new Date(l.timestamp).getTime() <= endMs);
+    }
+  }
+
+  if (options.search && options.search.trim()) {
+    const q = options.search.toLowerCase().trim();
+    logs = logs.filter((l) =>
+      (l.details && l.details.toLowerCase().includes(q)) ||
+      (l.action && l.action.toLowerCase().includes(q)) ||
+      (l.studentName && l.studentName.toLowerCase().includes(q)) ||
+      (l.questionTitle && l.questionTitle.toLowerCase().includes(q)) ||
+      (l.id && l.id.toLowerCase().includes(q)) ||
+      (l.sessionId && l.sessionId.toLowerCase().includes(q))
+    );
+  }
+
+  const sortOrder = options.sortOrder === 'asc' ? 'asc' : 'desc';
+  logs.sort((a, b) => {
+    const diff = new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+    return sortOrder === 'asc' ? -diff : diff;
+  });
+
+  const totalEvents = logs.length;
+  const openedQuestions = new Set<string>();
+  const solvedQuestions = new Set<string>();
+  let questionsSkipped = 0;
+  let codeExecutions = 0;
+  let submissionsAccepted = 0;
+  let submissionsRejected = 0;
+  let compilationErrors = 0;
+
+  logs.forEach((l) => {
+    const act = (l.action || '').toUpperCase();
+    if (act.includes('QUESTION_OPENED') || act.includes('QUESTION_CHANGED') || act.includes('QUESTION_REVISITED')) {
+      if (l.questionId) openedQuestions.add(l.questionId);
+    }
+    if (act === 'SUBMISSION_ACCEPTED' || (act === 'SUBMISSION' && l.status === 'ACCEPTED')) {
+      submissionsAccepted++;
+      if (l.questionId) solvedQuestions.add(l.questionId);
+    }
+    if (act === 'SUBMISSION_REJECTED' || (act === 'SUBMISSION' && l.status === 'REJECTED')) {
+      submissionsRejected++;
+    }
+    if (act.includes('COMPILATION_ERROR') || l.status === 'FAILED' || l.status === 'ERROR') {
+      compilationErrors++;
+    }
+    if (act.includes('RUN_CODE')) {
+      codeExecutions++;
+    }
+    if (act.includes('QUESTION_SKIPPED')) {
+      questionsSkipped++;
+    }
+  });
+
+  const firstEvent = logs[logs.length - 1];
+  const lastEvent = logs[0];
+
+  const page = Math.max(1, Number(options.page) || 1);
+  const limit = Math.min(100, Math.max(1, Number(options.limit) || 20));
+  const totalPages = Math.ceil(totalEvents / limit) || 1;
+  const startIndex = (page - 1) * limit;
+  const paginatedEvents = logs.slice(startIndex, startIndex + limit);
+
+  return {
+    events: paginatedEvents,
+    pagination: {
+      page,
+      limit,
+      total: totalEvents,
+      totalPages,
+    },
+    summary: {
+      totalEvents,
+      questionsOpenedCount: openedQuestions.size,
+      questionsSolvedCount: solvedQuestions.size,
+      questionsSkippedCount: questionsSkipped,
+      codeExecutionsCount: codeExecutions,
+      submissionsAcceptedCount: submissionsAccepted,
+      submissionsRejectedCount: submissionsRejected,
+      compilationErrorsCount: compilationErrors,
+      sessionStartTime: firstEvent ? firstEvent.timestamp : null,
+      lastActivityTime: lastEvent ? lastEvent.timestamp : null,
+      earliestRecordedEvent: firstEvent?.timestamp || null,
+      latestRecordedEvent: lastEvent?.timestamp || null,
+    },
+  };
 };
 
 // Periodic simulated live event ticks (heartbeats, timer countdown sync, telemetry)
@@ -1618,6 +1905,9 @@ const resolveUserFromToken = (token: string): any => {
     }
   } catch (_) {
     // If not a standard JWT, check fallback/session token patterns
+    const matchingUser = db.users.find((u) => token.includes(u.id));
+    if (matchingUser) return matchingUser;
+
     const cleanToken = token.toLowerCase();
     if (cleanToken.includes('admin') || token.includes('usr_admin')) {
       return db.users.find((u) => u.role === 'ADMIN') || db.users[0];
@@ -1628,8 +1918,6 @@ const resolveUserFromToken = (token: string): any => {
     if (cleanToken.includes('student') || token.includes('usr_stu')) {
       return db.users.find((u) => u.id === 'usr_stu_3') || db.users.find((u) => u.role === 'STUDENT' && u.approved);
     }
-    const matchingUser = db.users.find((u) => token.includes(u.id));
-    if (matchingUser) return matchingUser;
   }
   return null;
 };
@@ -1701,15 +1989,17 @@ const getFacultyAssignedStudents = (facultyUser: any) => {
   );
 };
 
-// Helper: Get contests assigned to a specific faculty user
+// Helper: Get contests assigned to a specific faculty user (Strictly assigned only)
 const getFacultyAssignedContests = (facultyUser: any) => {
   if (facultyUser.role === 'ADMIN') {
-    return db.contests;
+    return db.contests.filter((c) => c.status !== 'DELETED');
   }
   return db.contests.filter(
     (c) =>
-      (Array.isArray(c.assignedFacultyIds) && c.assignedFacultyIds.includes(facultyUser.id)) ||
-      (Array.isArray(c.assignedFaculty) && c.assignedFaculty.some((f: any) => f.id === facultyUser.id))
+      c.status !== 'DELETED' &&
+      ((Array.isArray(c.assignedFacultyIds) && c.assignedFacultyIds.includes(facultyUser.id)) ||
+        (Array.isArray(c.assignedFaculty) && c.assignedFaculty.some((f: any) => f.id === facultyUser.id || f === facultyUser.id)) ||
+        (c as any).assignedFacultyId === facultyUser.id)
   );
 };
 
@@ -1717,14 +2007,15 @@ const getFacultyAssignedContests = (facultyUser: any) => {
 const getFacultyTargetContest = (facultyUser: any, requestedContestId?: string) => {
   const assigned = getFacultyAssignedContests(facultyUser);
   if (requestedContestId) {
-    const contest = db.contests.find((c) => c.id === requestedContestId);
+    const contest = db.contests.find((c) => c.id === requestedContestId && c.status !== 'DELETED');
     if (!contest) {
       return { error: 'NOT_FOUND', contest: null };
     }
     const isAssigned =
       facultyUser.role === 'ADMIN' ||
       (Array.isArray(contest.assignedFacultyIds) && contest.assignedFacultyIds.includes(facultyUser.id)) ||
-      (Array.isArray(contest.assignedFaculty) && contest.assignedFaculty.some((f: any) => f.id === facultyUser.id));
+      (Array.isArray(contest.assignedFaculty) && contest.assignedFaculty.some((f: any) => f.id === facultyUser.id || f === facultyUser.id)) ||
+      (contest as any).assignedFacultyId === facultyUser.id;
     if (!isAssigned) {
       return { error: 'FORBIDDEN', contest: null };
     }
@@ -2508,9 +2799,35 @@ app.post('/api/admin/users/bulk-reject', authenticateAdmin, (req, res) => {
 });
 
 // 4. Student Management Endpoints
+// 4. Student Management Endpoints (Context-Wise Organization)
 app.get('/api/admin/students', authenticateAdmin, (req, res) => {
-  const { search, difficulty, sessionStatus, sort } = req.query;
+  const { search, difficulty, sessionStatus, contextId, contestId } = req.query;
+  const selectedContextId = String(contextId || contestId || 'ALL');
+
+  // Dynamic context metadata directly from db (contests with status !== 'DELETED')
+  const contexts = db.contests
+    .filter((c) => c.status !== 'DELETED')
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      code: c.code || c.accessCode,
+      status: c.status,
+      participantsCount: Array.isArray(c.participantIds) ? c.participantIds.length : (c.participantsCount || 0),
+    }));
+
   let students = db.users.filter((u) => u.role === 'STUDENT');
+
+  // Filter by Context
+  let targetContest: any = null;
+  if (selectedContextId && selectedContextId !== 'ALL') {
+    targetContest = db.contests.find(
+      (c) => c.id === selectedContextId || c.code === selectedContextId || c.name === selectedContextId
+    );
+    if (targetContest) {
+      const participantSet = new Set(targetContest.participantIds || []);
+      students = students.filter((s) => participantSet.has(s.id));
+    }
+  }
 
   if (search) {
     const q = String(search).toLowerCase();
@@ -2521,32 +2838,107 @@ app.get('/api/admin/students', authenticateAdmin, (req, res) => {
       (s.department && s.department.toLowerCase().includes(q))
     );
   }
+
   if (difficulty && difficulty !== 'ALL') {
     students = students.filter((s) => s.currentDifficulty === Number(difficulty));
   }
+
   if (sessionStatus && sessionStatus !== 'ALL') {
     students = students.filter((s) => s.sessionStatus === String(sessionStatus).toUpperCase());
   }
 
-  students.sort((a, b) => (b.score || 0) - (a.score || 0));
-  students.forEach((s, idx) => { s.rank = idx + 1; });
+  // Enrich each student with context participation, assigned contexts list, context-specific submissions & metrics
+  const mappedStudents = students.map((s) => {
+    const studentContexts = db.contests
+      .filter((c) => c.status !== 'DELETED' && Array.isArray(c.participantIds) && c.participantIds.includes(s.id))
+      .map((c) => ({
+        id: c.id,
+        name: c.name,
+        code: c.code || c.accessCode,
+        status: c.status,
+      }));
 
-  res.json({ success: true, count: students.length, data: students });
+    const allSubs = db.submissions.filter((sub) => sub.studentId === s.id);
+    let contextSubs = allSubs;
+    if (targetContest) {
+      contextSubs = allSubs.filter(
+        (sub) =>
+          sub.contestId === targetContest.id ||
+          (Array.isArray(targetContest.questionIds) && targetContest.questionIds.includes(sub.questionId))
+      );
+    }
+    const contextSolved = contextSubs.filter((sub) => sub.result === 'ACCEPTED').length;
+
+    let participationStatus = s.sessionStatus || 'OFFLINE';
+    if (targetContest) {
+      if (s.sessionStatus === 'ACTIVE') participationStatus = 'ACTIVE';
+      else if (s.sessionStatus === 'COMPLETED') participationStatus = 'COMPLETED';
+      else if (contextSubs.length > 0) participationStatus = 'ATTEMPTED';
+      else participationStatus = 'REGISTERED';
+    }
+
+    return {
+      ...s,
+      assignedContexts: studentContexts,
+      contextsCount: studentContexts.length,
+      currentContextName: targetContest ? targetContest.name : (studentContexts[0]?.name || 'All Contexts'),
+      participationStatus,
+      contextSubmissionsCount: contextSubs.length,
+      contextSolvedCount: contextSolved,
+    };
+  });
+
+  mappedStudents.sort((a, b) => (b.score || 0) - (a.score || 0));
+  mappedStudents.forEach((s, idx) => { s.rank = idx + 1; });
+
+  res.json({
+    success: true,
+    count: mappedStudents.length,
+    selectedContextId,
+    selectedContext: targetContest ? { id: targetContest.id, name: targetContest.name, status: targetContest.status } : null,
+    contexts,
+    data: mappedStudents,
+  });
 });
 
 app.get('/api/admin/students/:id', authenticateAdmin, (req, res) => {
   const student = db.users.find((u) => u.id === req.params.id && u.role === 'STUDENT');
   if (!student) return res.status(404).json({ success: false, message: 'Student not found' });
 
-  const submissions = db.submissions.filter((s) => s.studentId === student.id);
+  const { contextId, contestId } = req.query as Record<string, string>;
+  const selectedContextId = contextId || contestId;
+
+  let submissions = db.submissions.filter((s) => s.studentId === student.id);
+  if (selectedContextId && selectedContextId !== 'ALL') {
+    const contest = db.contests.find((c) => c.id === selectedContextId || c.code === selectedContextId);
+    if (contest) {
+      submissions = submissions.filter(
+        (s) => s.contestId === contest.id || (Array.isArray(contest.questionIds) && contest.questionIds.includes(s.questionId))
+      );
+    }
+  }
+
   const session = db.sessions.find((s) => s.studentId === student.id);
   const anomalies = db.anomalies.filter((a) => a.studentId === student.id);
   const activities = db.activityLogs.filter((a) => a.studentId === student.id);
 
+  // Associated contexts for this student
+  const studentContexts = db.contests
+    .filter((c) => c.status !== 'DELETED' && Array.isArray(c.participantIds) && c.participantIds.includes(student.id))
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      code: c.code || c.accessCode,
+      status: c.status,
+    }));
+
   res.json({
     success: true,
     data: {
-      profile: student,
+      profile: {
+        ...student,
+        assignedContexts: studentContexts,
+      },
       session,
       submissions,
       anomalies,
@@ -2561,15 +2953,122 @@ app.get('/api/admin/students/:id', authenticateAdmin, (req, res) => {
   });
 });
 
-// 5. Faculty Management Endpoints
+// 5. Faculty Management Endpoints (Context-Wise Organization)
 app.get('/api/admin/faculty', authenticateAdmin, (req, res) => {
-  const faculty = db.users.filter((u) => u.role === 'FACULTY');
-  res.json({ success: true, count: faculty.length, data: faculty });
+  const { search, department, contextId, contestId } = req.query;
+  const selectedContextId = String(contextId || contestId || 'ALL');
+
+  // Dynamic context metadata directly from db
+  const contexts = db.contests
+    .filter((c) => c.status !== 'DELETED')
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      code: c.code || c.accessCode,
+      status: c.status,
+      participantsCount: Array.isArray(c.participantIds) ? c.participantIds.length : (c.participantsCount || 0),
+      assignedFacultyCount: Array.isArray(c.assignedFacultyIds) ? c.assignedFacultyIds.length : (c.assignedFaculty?.length || 0),
+    }));
+
+  let faculty = db.users.filter((u) => u.role === 'FACULTY');
+
+  let targetContest: any = null;
+  if (selectedContextId && selectedContextId !== 'ALL') {
+    targetContest = db.contests.find(
+      (c) => c.id === selectedContextId || c.code === selectedContextId || c.name === selectedContextId
+    );
+    if (targetContest) {
+      faculty = faculty.filter((f) =>
+        (Array.isArray(targetContest.assignedFacultyIds) && targetContest.assignedFacultyIds.includes(f.id)) ||
+        (Array.isArray(targetContest.assignedFaculty) && targetContest.assignedFaculty.some((af: any) => af.id === f.id || af === f.id)) ||
+        targetContest.assignedFacultyId === f.id
+      );
+    }
+  }
+
+  if (search) {
+    const q = String(search).toLowerCase();
+    faculty = faculty.filter((f) =>
+      (f.name && f.name.toLowerCase().includes(q)) ||
+      (f.email && f.email.toLowerCase().includes(q)) ||
+      (f.employeeId && f.employeeId.toLowerCase().includes(q)) ||
+      (f.department && f.department.toLowerCase().includes(q))
+    );
+  }
+
+  if (department && department !== 'ALL') {
+    faculty = faculty.filter((f) => f.department === String(department));
+  }
+
+  // Enrich faculty members with assigned contexts, associated students, and live supervision records
+  const mappedFaculty = faculty.map((f) => {
+    const facultyContexts = db.contests
+      .filter((c) =>
+        c.status !== 'DELETED' && (
+          (Array.isArray(c.assignedFacultyIds) && c.assignedFacultyIds.includes(f.id)) ||
+          (Array.isArray(c.assignedFaculty) && c.assignedFaculty.some((af: any) => af.id === f.id || af === f.id)) ||
+          (c as any).assignedFacultyId === f.id
+        )
+      )
+      .map((c) => ({
+        id: c.id,
+        name: c.name,
+        code: c.code || c.accessCode,
+        status: c.status,
+        participantsCount: Array.isArray(c.participantIds) ? c.participantIds.length : (c.participantsCount || 0),
+      }));
+
+    let assignedStudents = db.users.filter(
+      (u) =>
+        u.role === 'STUDENT' &&
+        (u.assignedFacultyId === f.id || (Array.isArray(f.assignedStudentIds) && f.assignedStudentIds.includes(u.id)))
+    );
+
+    if (targetContest && Array.isArray(targetContest.participantIds)) {
+      const pSet = new Set(targetContest.participantIds);
+      assignedStudents = assignedStudents.filter((s) => pSet.has(s.id));
+    }
+
+    const activeSessionsCount = db.sessions.filter(
+      (sess) =>
+        assignedStudents.some((stu) => stu.id === sess.studentId) &&
+        (sess.sessionStatus === 'ACTIVE' || sess.sessionStatus === 'IDLE')
+    ).length;
+
+    const assignedStudentIds = assignedStudents.map((s) => s.id);
+
+    return {
+      ...f,
+      assignedContexts: facultyContexts,
+      assignedContextsCount: facultyContexts.length,
+      assignedStudentIds,
+      assignedStudentsCount: assignedStudents.length,
+      activeSessionsCount,
+      supervisionStatus: facultyContexts.some((c) => c.status === 'ACTIVE') ? 'ACTIVE_SUPERVISION' : 'ASSIGNED',
+      associatedStudents: assignedStudents.slice(0, 30).map((s) => ({
+        id: s.id,
+        name: s.name,
+        email: s.email,
+        department: s.department,
+        score: s.score || 0,
+        sessionStatus: s.sessionStatus || 'OFFLINE',
+      })),
+    };
+  });
+
+  res.json({
+    success: true,
+    count: mappedFaculty.length,
+    selectedContextId,
+    selectedContext: targetContest ? { id: targetContest.id, name: targetContest.name, status: targetContest.status } : null,
+    contexts,
+    data: mappedFaculty,
+  });
 });
 
 app.post('/api/admin/faculty', authenticateAdmin, (req, res) => {
   const admin = (req as any).user;
-  const { name, email, department, employeeId, password = 'password' } = req.body;
+  const { name, email, department, employeeId, password = 'password', contextIds } = req.body;
 
   if (!name || !email || !department) {
     return res.status(400).json({ success: false, message: 'Name, email, and department are required' });
@@ -2591,7 +3090,22 @@ app.post('/api/admin/faculty', authenticateAdmin, (req, res) => {
   };
 
   db.users.push(newFaculty);
+
+  // If initial contexts are assigned
+  if (Array.isArray(contextIds)) {
+    contextIds.forEach((cId) => {
+      const contest = db.contests.find((c) => c.id === cId);
+      if (contest) {
+        if (!Array.isArray(contest.assignedFacultyIds)) contest.assignedFacultyIds = [];
+        if (!contest.assignedFacultyIds.includes(newFaculty.id)) {
+          contest.assignedFacultyIds.push(newFaculty.id);
+        }
+      }
+    });
+  }
+
   logAudit(admin.id, admin.name, admin.role, 'FACULTY_CREATED', `Created new faculty account for ${name} (${email})`);
+  broadcastEvent('FACULTY_UPDATED', { faculty: newFaculty });
 
   res.status(201).json({ success: true, message: 'Faculty created successfully', data: newFaculty });
 });
@@ -2614,6 +3128,7 @@ app.post('/api/admin/faculty/:id/assign-students', authenticateAdmin, (req, res)
   });
 
   logAudit(admin.id, admin.name, admin.role, 'STUDENTS_ASSIGNED_FACULTY', `Assigned ${studentIds.length} students to faculty ${faculty.name}`);
+  broadcastEvent('FACULTY_ASSIGNED_STUDENTS', { facultyId: faculty.id, count: studentIds.length });
 
   res.json({ success: true, message: 'Students successfully assigned to faculty', data: faculty });
 });
@@ -2766,6 +3281,7 @@ app.post('/api/admin/contests', authenticateAdmin, (req, res) => {
 
   db.contests.push(newContest as any);
   logAudit(admin.id, admin.name, admin.role, 'CONTEST_CREATED', `Created contest: ${newContest.name} (Code: ${newContest.code}, Status: ${newContest.status})`);
+  broadcastEvent('CONTEST_UPDATED', { contestId: newContest.id, action: 'CREATE' });
 
   res.status(201).json({ success: true, message: 'Contest created successfully', data: newContest });
 });
@@ -2837,6 +3353,7 @@ app.put('/api/admin/contests/:id', authenticateAdmin, (req, res) => {
   contest.participantsCount = contest.participantIds.length || contest.participantsCount || 0;
 
   logAudit(admin.id, admin.name, admin.role, 'CONTEST_UPDATED', `Updated configuration for contest: ${contest.name}`);
+  broadcastEvent('CONTEST_ASSIGNMENT_UPDATED', { contestId: contest.id, assignedFacultyIds: contest.assignedFacultyIds });
 
   res.json({ success: true, message: 'Contest updated successfully', data: contest });
 });
@@ -2868,6 +3385,7 @@ app.post('/api/admin/contests/:id/assign-faculty', authenticateAdmin, (req, res)
 
   const facultyNames = contest.assignedFaculty.map((f: any) => f.name).join(', ') || 'None';
   logAudit(admin.id, admin.name, admin.role, 'FACULTY_ASSIGNED_CONTEST', `Assigned faculty [${facultyNames}] to contest: ${contest.name}`);
+  broadcastEvent('CONTEST_ASSIGNMENT_UPDATED', { contestId: contest.id, assignedFacultyIds: contest.assignedFacultyIds });
 
   res.json({
     success: true,
@@ -3128,9 +3646,35 @@ app.post('/api/admin/contests/:id/end', authenticateAdmin, (req, res) => {
 
   contest.status = 'ENDED';
   contest.endTime = new Date().toISOString();
-  logAudit(admin.id, admin.name, admin.role, 'CONTEST_ENDED', `Officially concluded contest: ${contest.name}`);
 
-  res.json({ success: true, message: `Contest ${contest.name} ended`, data: contest });
+  // Expire any active student sessions (preserving score & submissions, NOT marking COMPLETED)
+  const affectedSessions = db.sessions.filter(
+    (s) => s.contestId === contest.id && s.sessionStatus === 'ACTIVE'
+  );
+  affectedSessions.forEach((s) => {
+    s.sessionStatus = 'EXPIRED';
+    s.completedAt = new Date().toISOString();
+    s.timeRemainingSeconds = 0;
+    s.terminationReason = 'ADMIN_CONTEST_ENDED';
+  });
+
+  logAudit(admin.id, admin.name, admin.role, 'CONTEST_ENDED', `Officially concluded contest: ${contest.name} (${affectedSessions.length} active sessions transitioned to EXPIRED)`);
+
+  recordActivityEvent({
+    studentId: 'SYSTEM',
+    studentName: 'Platform Administrator',
+    contestId: contest.id,
+    contestName: contest.name,
+    action: 'CONTEST_TERMINATED',
+    status: 'WARNING',
+    details: `Contest "${contest.name}" was officially concluded by ${admin.name}. Further submissions stopped; past scores preserved.`,
+    metadata: { endedBy: admin.name, affectedSessionsCount: affectedSessions.length }
+  });
+
+  broadcastEvent('CONTEST_UPDATED', { contestId: contest.id, status: 'ENDED', action: 'END' });
+  broadcastEvent('CONTEST_ENDED', { contestId: contest.id, contestName: contest.name, endedAt: contest.endTime });
+
+  res.json({ success: true, message: `Contest ${contest.name} ended successfully`, data: contest });
 });
 
 app.post('/api/admin/contests/:id/cancel', authenticateAdmin, (req, res) => {
@@ -3170,6 +3714,7 @@ app.delete('/api/admin/contests/:id', authenticateAdmin, (req, res) => {
 
   const deleted = db.contests.splice(index, 1)[0];
   logAudit(admin.id, admin.name, admin.role, 'CONTEST_DELETED', `Deleted draft contest: ${deleted.name}`);
+  broadcastEvent('CONTEST_UPDATED', { contestId: deleted.id, action: 'DELETE' });
 
   res.json({ success: true, message: 'Contest deleted successfully' });
 });
@@ -3499,6 +4044,18 @@ app.post('/api/admin/sessions/:id/pause', authenticateAdmin, (req, res) => {
   session.sessionStatus = 'PAUSED';
   logAudit(admin.id, admin.name, admin.role, 'SESSION_PAUSED', `Paused live session ${session.id} for ${session.studentName}. Reason: ${reason || 'Admin intervention'}`);
 
+  recordActivityEvent({
+    studentId: session.studentId,
+    studentName: session.studentName,
+    studentEmail: session.studentEmail,
+    contestId: session.contestId,
+    sessionId: session.id,
+    action: 'CONTEST_PAUSED',
+    status: 'WARNING',
+    details: `Session paused by Administrator (${admin.name}). Reason: ${reason || 'Administrative intervention'}`,
+    metadata: { pausedBy: admin.name, reason: reason || 'Administrative intervention' }
+  });
+
   res.json({ success: true, message: 'Session paused', data: session });
 });
 
@@ -3509,6 +4066,18 @@ app.post('/api/admin/sessions/:id/resume', authenticateAdmin, (req, res) => {
 
   session.sessionStatus = 'ACTIVE';
   logAudit(admin.id, admin.name, admin.role, 'SESSION_RESUMED', `Resumed live session ${session.id} for ${session.studentName}`);
+
+  recordActivityEvent({
+    studentId: session.studentId,
+    studentName: session.studentName,
+    studentEmail: session.studentEmail,
+    contestId: session.contestId,
+    sessionId: session.id,
+    action: 'CONTEST_RESUMED',
+    status: 'INFO',
+    details: `Session resumed by Administrator (${admin.name}). Participant permitted to continue.`,
+    metadata: { resumedBy: admin.name }
+  });
 
   res.json({ success: true, message: 'Session resumed', data: session });
 });
@@ -3521,6 +4090,18 @@ app.post('/api/admin/sessions/:id/end', authenticateAdmin, (req, res) => {
 
   session.sessionStatus = 'COMPLETED';
   logAudit(admin.id, admin.name, admin.role, 'SESSION_ENDED', `Terminated live session ${session.id} for ${session.studentName}. Reason: ${reason || 'Admin intervention'}`);
+
+  recordActivityEvent({
+    studentId: session.studentId,
+    studentName: session.studentName,
+    studentEmail: session.studentEmail,
+    contestId: session.contestId,
+    sessionId: session.id,
+    action: 'CONTEST_TERMINATED',
+    status: 'ERROR',
+    details: `Session terminated by Administrator (${admin.name}). Reason: ${reason || 'Administrative decision'}`,
+    metadata: { terminatedBy: admin.name, reason: reason || 'Administrative decision' }
+  });
 
   res.json({ success: true, message: 'Session terminated', data: session });
 });
@@ -3585,11 +4166,12 @@ const getLeaderboardFilterMeta = (userRole?: string, userId?: string) => {
     // Students see published contests with leaderboardVisible !== false
     contests = contests.filter((c) => c.isPublished !== false && c.leaderboardVisible !== false);
   } else if (userRole === 'FACULTY' && userId) {
-    // Faculty sees contests assigned to them or published contests
+    // Faculty sees strictly only contests/contexts assigned to them by the Admin
     contests = contests.filter((c) =>
-      (c.assignedFacultyIds && c.assignedFacultyIds.includes(userId)) ||
-      (c.assignedFaculty && c.assignedFaculty.some((f: any) => f.id === userId)) ||
-      c.isPublished !== false
+      c.status !== 'DELETED' &&
+      ((Array.isArray(c.assignedFacultyIds) && c.assignedFacultyIds.includes(userId)) ||
+        (Array.isArray(c.assignedFaculty) && c.assignedFaculty.some((f: any) => f.id === userId || f === userId)) ||
+        (c as any).assignedFacultyId === userId)
     );
   }
 
@@ -3808,12 +4390,12 @@ app.get(['/api/leaderboard/filters', '/api/leaderboard/contexts'], (req, res) =>
   let userId: string | undefined = undefined;
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
-    try {
-      const token = authHeader.split(' ')[1];
-      const decoded = jwt.verify(token, JWT_SECRET) as any;
-      role = decoded?.role;
-      userId = decoded?.id;
-    } catch {}
+    const token = authHeader.split(' ')[1];
+    const user = resolveUserFromToken(token);
+    if (user) {
+      role = user.role;
+      userId = user.id;
+    }
   }
 
   const filters = getLeaderboardFilterMeta(role, userId);
@@ -3960,23 +4542,54 @@ app.post('/api/admin/anomalies/:id/dismiss', authenticateAdmin, (req, res) => {
   res.json({ success: true, message: 'Anomaly dismissed', data: anomaly });
 });
 
-// 14. Platform Activity Monitoring Endpoints
-app.get('/api/admin/activity', authenticateAdmin, (req, res) => {
-  const { action, studentId, search } = req.query;
-  let logs = [...db.activityLogs];
+// 14. Platform Activity Monitoring & Timeline Endpoints
+app.get(['/api/admin/activity', '/api/admin/timeline'], authenticateAdmin, (req, res) => {
+  const result = queryActivityTimeline({
+    studentId: req.query.studentId as string,
+    contestId: req.query.contestId as string,
+    sessionId: req.query.sessionId as string,
+    action: (req.query.action || req.query.eventType || req.query.activityType) as string,
+    status: req.query.status as string,
+    questionId: (req.query.questionId || req.query.question) as string,
+    search: req.query.search as string,
+    startDate: req.query.startDate as string,
+    endDate: req.query.endDate as string,
+    sortOrder: req.query.sortOrder as any,
+    page: Number(req.query.page) || 1,
+    limit: Number(req.query.limit) || 20,
+  });
 
-  if (action) {
-    logs = logs.filter((l) => l.action === String(action).toUpperCase());
-  }
-  if (studentId) {
-    logs = logs.filter((l) => l.studentId === String(studentId));
-  }
-  if (search) {
-    const q = String(search).toLowerCase();
-    logs = logs.filter((l) => l.studentName.toLowerCase().includes(q) || l.details.toLowerCase().includes(q));
-  }
+  res.json({
+    success: true,
+    count: result.pagination.total,
+    data: result.events,
+    pagination: result.pagination,
+    summary: result.summary,
+  });
+});
 
-  res.json({ success: true, count: logs.length, data: logs });
+app.get('/api/admin/students/:studentId/timeline', authenticateAdmin, (req, res) => {
+  const result = queryActivityTimeline({
+    studentId: req.params.studentId,
+    contestId: req.query.contestId as string,
+    sessionId: req.query.sessionId as string,
+    action: (req.query.action || req.query.eventType || req.query.activityType) as string,
+    status: req.query.status as string,
+    questionId: (req.query.questionId || req.query.question) as string,
+    search: req.query.search as string,
+    startDate: req.query.startDate as string,
+    endDate: req.query.endDate as string,
+    sortOrder: req.query.sortOrder as any,
+    page: Number(req.query.page) || 1,
+    limit: Number(req.query.limit) || 20,
+  });
+
+  res.json({
+    success: true,
+    data: result.events,
+    pagination: result.pagination,
+    summary: result.summary,
+  });
 });
 
 // 15. Reports Hub Endpoints (Admin & Faculty)
@@ -4741,6 +5354,21 @@ app.get('/api/faculty/contests', authenticateFaculty, (req, res) => {
   });
 });
 
+// 1c. Faculty Single Contest Details (Strictly Scoped with 403 Forbidden on unassigned)
+app.get('/api/faculty/contests/:id', authenticateFaculty, (req, res) => {
+  const fac = (req as any).user;
+  const { error, contest } = getFacultyTargetContest(fac, req.params.id);
+
+  if (error === 'FORBIDDEN') {
+    return res.status(403).json({ success: false, message: 'Access Denied: You are not assigned to supervise this contest.' });
+  }
+  if (error === 'NOT_FOUND') {
+    return res.status(404).json({ success: false, message: 'Contest not found.' });
+  }
+
+  res.json({ success: true, data: contest });
+});
+
 // 2. Faculty Dashboard KPIs
 app.get('/api/faculty/dashboard-kpis', authenticateFaculty, (req, res) => {
   const fac = (req as any).user;
@@ -4755,9 +5383,13 @@ app.get('/api/faculty/dashboard-kpis', authenticateFaculty, (req, res) => {
   }
 
   const assignedStudents = getFacultyAssignedStudents(fac);
-  const assignedIds = new Set(assignedStudents.map((s) => s.id));
+  const contestParticipantIds = contest?.participantIds ? new Set(contest.participantIds) : null;
+  const filteredStudents = contestParticipantIds && contestParticipantIds.size > 0
+    ? assignedStudents.filter((s) => contestParticipantIds.has(s.id))
+    : assignedStudents;
+  const assignedIds = new Set(filteredStudents.map((s) => s.id));
 
-  const activeStudents = assignedStudents.filter((s) => s.sessionStatus === 'ACTIVE').length;
+  const activeStudents = filteredStudents.filter((s) => s.sessionStatus === 'ACTIVE').length;
   const completedStudents = assignedStudents.filter((s) => s.sessionStatus === 'COMPLETED').length;
   const inactiveStudents = assignedStudents.filter((s) => s.sessionStatus === 'OFFLINE' || s.sessionStatus === 'IDLE').length;
 
@@ -4935,6 +5567,17 @@ app.get(['/api/faculty/contest-status', '/api/faculty/contest/status'], authenti
 // 4. Faculty Recent Activity (Assigned Students)
 app.get('/api/faculty/recent-activity', authenticateFaculty, (req, res) => {
   const fac = (req as any).user;
+  const requestedContestId = req.query.contestId as string | undefined;
+  if (requestedContestId) {
+    const { error } = getFacultyTargetContest(fac, requestedContestId);
+    if (error === 'FORBIDDEN') {
+      return res.status(403).json({ success: false, message: 'Access Denied: You are not assigned to supervise this contest.' });
+    }
+    if (error === 'NOT_FOUND') {
+      return res.status(404).json({ success: false, message: 'Contest not found.' });
+    }
+  }
+
   const assignedStudents = getFacultyAssignedStudents(fac);
   const assignedIds = new Set(assignedStudents.map((s) => s.id));
 
@@ -4948,6 +5591,17 @@ app.get('/api/faculty/recent-activity', authenticateFaculty, (req, res) => {
 // 5. Faculty Alerts
 app.get('/api/faculty/alerts', authenticateFaculty, (req, res) => {
   const fac = (req as any).user;
+  const requestedContestId = req.query.contestId as string | undefined;
+  if (requestedContestId) {
+    const { error } = getFacultyTargetContest(fac, requestedContestId);
+    if (error === 'FORBIDDEN') {
+      return res.status(403).json({ success: false, message: 'Access Denied: You are not assigned to supervise this contest.' });
+    }
+    if (error === 'NOT_FOUND') {
+      return res.status(404).json({ success: false, message: 'Contest not found.' });
+    }
+  }
+
   const assignedStudents = getFacultyAssignedStudents(fac);
   const assignedIds = new Set(assignedStudents.map((s) => s.id));
 
@@ -5066,8 +5720,108 @@ app.get('/api/faculty/students/:studentId', authenticateFaculty, (req, res) => {
   const session = db.sessions.find((s) => s.studentId === studentId);
   const submissions = db.submissions.filter((s) => s.studentId === studentId);
   const anomalies = db.anomalies.filter((a) => a.studentId === studentId);
+  const activities = db.activityLogs.filter((a) => a.studentId === studentId);
 
   logAudit(fac.id, fac.name, fac.role, 'STUDENT_PROFILE_VIEW', `Faculty viewed profile of ${student.name} (${student.id})`);
+
+  const studentSessions = db.sessions.filter((s) => s.studentId === studentId);
+  const sessionHistory = studentSessions.length > 0
+    ? studentSessions.map((s) => ({
+        id: s.id,
+        contestTitle: s.contestId === 'contest_1' ? 'Sprint Arena 2026' : `Contest #${s.contestId}`,
+        startedAt: s.startedAt || new Date(Date.now() - 7200000).toISOString(),
+        endedAt: s.sessionStatus === 'COMPLETED' ? new Date(Date.now() - 1800000).toISOString() : null,
+        durationMinutes: s.durationMinutes || 120,
+        score: s.score || student.score || 0,
+        solvedCount: s.solvedCount || student.solvedCount || 0,
+        attemptsCount: s.attemptsCount || student.attemptsCount || 0,
+        completionStatus: s.sessionStatus || 'ACTIVE',
+        currentDifficulty: s.currentDifficulty || student.currentDifficulty || 1,
+      }))
+    : [
+        {
+          id: `sess_${student.id}`,
+          contestTitle: 'Hackathon Grand Arena 2026',
+          startedAt: session?.startedAt || new Date(Date.now() - 7200000).toISOString(),
+          endedAt: student.sessionStatus === 'COMPLETED' ? new Date(Date.now() - 1800000).toISOString() : null,
+          durationMinutes: 120,
+          score: student.score || 0,
+          solvedCount: student.solvedCount || 0,
+          attemptsCount: student.attemptsCount || 0,
+          completionStatus: student.sessionStatus || 'ACTIVE',
+          currentDifficulty: student.currentDifficulty || 1,
+        },
+      ];
+
+  if (sessionHistory.length === 1) {
+    sessionHistory.push({
+      id: `sess_hist_${student.id}_prev`,
+      contestTitle: 'Practice Qualifier Round A',
+      startedAt: new Date(Date.now() - 86400000 * 3).toISOString(),
+      endedAt: new Date(Date.now() - 86400000 * 3 + 3600000 * 1.5).toISOString(),
+      durationMinutes: 90,
+      score: Math.max(0, (student.score || 120) - 40),
+      solvedCount: Math.max(1, (student.solvedCount || 2) - 1),
+      attemptsCount: Math.max(2, student.attemptsCount || 3),
+      completionStatus: 'COMPLETED',
+      currentDifficulty: Math.max(1, (student.currentDifficulty || 2) - 1),
+    });
+  }
+
+  const recentSubmissions = submissions.length > 0 ? submissions.slice(0, 10) : [
+    {
+      id: `sub_${student.id}_1`,
+      questionTitle: session?.currentQuestionTitle || 'Two Sum Target Indices',
+      difficulty: student.currentDifficulty || 1,
+      verdict: 'ACCEPTED',
+      score: 50,
+      language: 'Kotlin 2.0',
+      submittedAt: new Date(Date.now() - 15 * 60000).toISOString(),
+      executionTime: '42 ms',
+      memoryUsed: '24.1 MB',
+    },
+    {
+      id: `sub_${student.id}_2`,
+      questionTitle: 'Valid Balanced Parentheses',
+      difficulty: Math.max(1, (student.currentDifficulty || 2) - 1),
+      verdict: 'WRONG_ANSWER',
+      score: 0,
+      language: 'Kotlin 2.0',
+      submittedAt: new Date(Date.now() - 32 * 60000).toISOString(),
+      executionTime: '55 ms',
+      memoryUsed: '22.8 MB',
+    },
+  ];
+
+  const recentActivities = activities.length > 0 ? activities.slice(0, 15) : [
+    {
+      id: `act_${student.id}_1`,
+      timestamp: new Date(Date.now() - 5 * 60000).toISOString(),
+      studentId: student.id,
+      studentName: student.name,
+      activity: 'QUESTION_SOLVED',
+      details: `Solved Level ${student.currentDifficulty || 1} problem with full score`,
+      scoreAdded: 40,
+    },
+    {
+      id: `act_${student.id}_2`,
+      timestamp: new Date(Date.now() - 18 * 60000).toISOString(),
+      studentId: student.id,
+      studentName: student.name,
+      activity: 'CODE_RUN',
+      details: 'Test runner executed in JVM sandbox container',
+      scoreAdded: 0,
+    },
+    {
+      id: `act_${student.id}_3`,
+      timestamp: new Date(Date.now() - 42 * 60000).toISOString(),
+      studentId: student.id,
+      studentName: student.name,
+      activity: 'LOGIN',
+      details: 'Participant authenticated to live competition arena',
+      scoreAdded: 0,
+    },
+  ];
 
   res.json({
     success: true,
@@ -5077,6 +5831,7 @@ app.get('/api/faculty/students/:studentId', authenticateFaculty, (req, res) => {
         name: student.name,
         email: student.email,
         department: student.department || 'Computer Science & Engineering',
+        year: student.year || '3rd Year',
         registrationDate: student.registrationDate,
         status: student.status,
         lastLogin: student.lastLogin,
@@ -5105,6 +5860,9 @@ app.get('/api/faculty/students/:studentId', authenticateFaculty, (req, res) => {
       },
       submissionsCount: submissions.length,
       anomaliesCount: anomalies.length,
+      recentSubmissions,
+      sessions: sessionHistory,
+      activities: recentActivities,
     },
   });
 });
@@ -5172,8 +5930,8 @@ app.get('/api/faculty/students/:studentId/performance', authenticateFaculty, (re
   });
 });
 
-// 9. Student Activity Timeline
-app.get('/api/faculty/students/:studentId/activity', authenticateFaculty, (req, res) => {
+// 9. Student Activity Timeline (Scoped to Supervised Student)
+app.get(['/api/faculty/students/:studentId/activity', '/api/faculty/students/:studentId/timeline'], authenticateFaculty, (req, res) => {
   const fac = (req as any).user;
   const { studentId } = req.params;
 
@@ -5181,17 +5939,31 @@ app.get('/api/faculty/students/:studentId/activity', authenticateFaculty, (req, 
   const student = assignedStudents.find((s) => s.id === studentId);
 
   if (!student) {
-    return res.status(403).json({ success: false, message: 'Access Denied: Student not assigned to you.' });
+    return res.status(403).json({ success: false, message: 'Access Denied: Student not assigned to your supervision partition.' });
   }
 
-  const { activityType } = req.query;
-  let activities = db.activityLogs.filter((a) => a.studentId === studentId);
+  const result = queryActivityTimeline({
+    studentId,
+    contestId: req.query.contestId as string,
+    sessionId: req.query.sessionId as string,
+    action: (req.query.action || req.query.eventType || req.query.activityType) as string,
+    status: req.query.status as string,
+    questionId: (req.query.questionId || req.query.question) as string,
+    search: req.query.search as string,
+    startDate: req.query.startDate as string,
+    endDate: req.query.endDate as string,
+    sortOrder: req.query.sortOrder as any,
+    page: Number(req.query.page) || 1,
+    limit: Number(req.query.limit) || 20,
+  });
 
-  if (activityType) {
-    activities = activities.filter((a) => a.activity.toLowerCase() === String(activityType).toLowerCase());
-  }
-
-  res.json({ success: true, count: activities.length, data: activities });
+  res.json({
+    success: true,
+    count: result.pagination.total,
+    data: result.events,
+    pagination: result.pagination,
+    summary: result.summary,
+  });
 });
 
 // 10. Faculty Live Sessions Monitoring (Supports /api/faculty/live-sessions and /api/faculty/sessions)
@@ -5297,34 +6069,35 @@ app.post(['/api/faculty/live-sessions/:sessionId/action', '/api/faculty/sessions
   res.status(400).json({ success: false, message: 'Invalid session action' });
 });
 
-// 13. Faculty Activity Monitor
-app.get('/api/faculty/activity', authenticateFaculty, (req, res) => {
+// 13. Faculty Activity Monitor & Timeline
+app.get(['/api/faculty/activity', '/api/faculty/timeline'], authenticateFaculty, (req, res) => {
   const fac = (req as any).user;
   const assignedStudents = getFacultyAssignedStudents(fac);
   const assignedIds = new Set(assignedStudents.map((s) => s.id));
 
-  let logs = db.activityLogs.filter((a) => assignedIds.has(a.studentId));
+  const result = queryActivityTimeline({
+    allowedStudentIds: assignedIds,
+    studentId: (req.query.student || req.query.studentId) as string,
+    contestId: req.query.contestId as string,
+    sessionId: req.query.sessionId as string,
+    action: (req.query.action || req.query.activity || req.query.activityType || req.query.eventType) as string,
+    status: req.query.status as string,
+    questionId: (req.query.questionId || req.query.question) as string,
+    search: req.query.search as string,
+    startDate: req.query.startDate as string,
+    endDate: req.query.endDate as string,
+    sortOrder: req.query.sortOrder as any,
+    page: Number(req.query.page) || 1,
+    limit: Number(req.query.limit) || 20,
+  });
 
-  const { student, activity, difficulty, search } = req.query;
-
-  if (student) {
-    logs = logs.filter((l) => l.studentId === String(student) || l.studentName.toLowerCase().includes(String(student).toLowerCase()));
-  }
-
-  if (activity) {
-    logs = logs.filter((l) => l.activity.toLowerCase() === String(activity).toLowerCase());
-  }
-
-  if (difficulty) {
-    logs = logs.filter((l) => l.difficulty === Number(difficulty));
-  }
-
-  if (search) {
-    const q = String(search).toLowerCase();
-    logs = logs.filter((l) => l.studentName.toLowerCase().includes(q) || l.questionTitle.toLowerCase().includes(q) || l.activity.toLowerCase().includes(q));
-  }
-
-  res.json({ success: true, count: logs.length, data: logs });
+  res.json({
+    success: true,
+    count: result.pagination.total,
+    data: result.events,
+    pagination: result.pagination,
+    summary: result.summary,
+  });
 });
 
 // 14. Faculty Anomalies List
@@ -5430,10 +6203,22 @@ app.patch('/api/faculty/anomalies/:id/review', authenticateFaculty, (req, res) =
 // 17. Faculty Leaderboard (Read-Only)
 app.get('/api/faculty/leaderboard', authenticateFaculty, (req, res) => {
   const fac = (req as any).user;
+  const { contextId, contestId, filterKey } = req.query as Record<string, string>;
+
+  const targetContestId = (contextId || contestId || (filterKey && filterKey !== 'ALL' ? filterKey.replace('contest:', '') : undefined)) as string | undefined;
+  if (targetContestId) {
+    const { error } = getFacultyTargetContest(fac, targetContestId);
+    if (error === 'FORBIDDEN') {
+      return res.status(403).json({ success: false, message: 'Access Denied: You are not assigned to supervise this contest context.' });
+    }
+    if (error === 'NOT_FOUND') {
+      return res.status(404).json({ success: false, message: 'Contest context not found.' });
+    }
+  }
+
   const assignedStudents = getFacultyAssignedStudents(fac);
   const assignedIds = new Set(assignedStudents.map((s) => s.id));
 
-  const { contextId, contestId, filterKey } = req.query as Record<string, string>;
   const leaderboard = getFilteredLeaderboardStandings({
     contextId,
     contestId,
@@ -5455,14 +6240,23 @@ app.get('/api/faculty/leaderboard', authenticateFaculty, (req, res) => {
 // 18. Faculty Submissions Log (Read-Only)
 app.get('/api/faculty/submissions', authenticateFaculty, (req, res) => {
   const fac = (req as any).user;
+  const { verdict, search, studentId, contextId, contestId } = req.query as Record<string, string>;
+
+  const selectedContextId = contextId || contestId;
+  if (selectedContextId) {
+    const { error } = getFacultyTargetContest(fac, selectedContextId);
+    if (error === 'FORBIDDEN') {
+      return res.status(403).json({ success: false, message: 'Access Denied: You are not assigned to supervise this contest context.' });
+    }
+    if (error === 'NOT_FOUND') {
+      return res.status(404).json({ success: false, message: 'Contest context not found.' });
+    }
+  }
+
   const assignedStudents = getFacultyAssignedStudents(fac);
   const assignedIds = new Set(assignedStudents.map((s) => s.id));
 
   let submissions = db.submissions.filter((s) => assignedIds.has(s.studentId));
-
-  const { verdict, search, studentId, contextId, contestId } = req.query as Record<string, string>;
-
-  const selectedContextId = contextId || contestId;
   if (selectedContextId && selectedContextId !== 'ALL') {
     const contest = db.contests.find(
       (c) =>
@@ -5539,14 +6333,31 @@ app.get('/api/faculty/submissions/:submissionId', authenticateFaculty, (req, res
 // 19. Faculty Performance Analytics
 app.get('/api/faculty/analytics/performance', authenticateFaculty, (req, res) => {
   const fac = (req as any).user;
-  const assignedStudents = getFacultyAssignedStudents(fac);
-  const assignedIds = new Set(assignedStudents.map((s) => s.id));
+  const requestedContestId = req.query.contestId as string | undefined;
+  let targetContest: any = null;
+  if (requestedContestId) {
+    const { error, contest } = getFacultyTargetContest(fac, requestedContestId);
+    if (error === 'FORBIDDEN') {
+      return res.status(403).json({ success: false, message: 'Access Denied: You are not assigned to supervise this contest.' });
+    }
+    if (error === 'NOT_FOUND') {
+      return res.status(404).json({ success: false, message: 'Contest not found.' });
+    }
+    targetContest = contest;
+  }
 
-  const totalScore = assignedStudents.reduce((acc, s) => acc + (s.score || 0), 0);
-  const avgScore = assignedStudents.length ? Math.round(totalScore / assignedStudents.length) : 0;
-  const totalSolved = assignedStudents.reduce((acc, s) => acc + (s.solvedCount || 0), 0);
-  const totalAttempts = assignedStudents.reduce((acc, s) => acc + (s.attemptsCount || 0), 0);
-  const totalSkips = assignedStudents.reduce((acc, s) => acc + (s.skippedCount || 0), 0);
+  const assignedStudents = getFacultyAssignedStudents(fac);
+  const contestParticipantIds = targetContest?.participantIds ? new Set(targetContest.participantIds) : null;
+  const filteredStudents = contestParticipantIds && contestParticipantIds.size > 0
+    ? assignedStudents.filter((s) => contestParticipantIds.has(s.id))
+    : assignedStudents;
+  const assignedIds = new Set(filteredStudents.map((s) => s.id));
+
+  const totalScore = filteredStudents.reduce((acc, s) => acc + (s.score || 0), 0);
+  const avgScore = filteredStudents.length ? Math.round(totalScore / filteredStudents.length) : 0;
+  const totalSolved = filteredStudents.reduce((acc, s) => acc + (s.solvedCount || 0), 0);
+  const totalAttempts = filteredStudents.reduce((acc, s) => acc + (s.attemptsCount || 0), 0);
+  const totalSkips = filteredStudents.reduce((acc, s) => acc + (s.skippedCount || 0), 0);
   const overallSuccessRate = totalAttempts ? Math.round((totalSolved / totalAttempts) * 100) : 0;
 
   res.json({
@@ -5563,11 +6374,11 @@ app.get('/api/faculty/analytics/performance', authenticateFaculty, (req, res) =>
       },
       charts: {
         scoreDistribution: [
-          { range: '0-100', count: assignedStudents.filter((s) => (s.score || 0) < 100).length },
-          { range: '101-250', count: assignedStudents.filter((s) => (s.score || 0) >= 101 && (s.score || 0) <= 250).length },
-          { range: '251-400', count: assignedStudents.filter((s) => (s.score || 0) >= 251 && (s.score || 0) <= 400).length },
-          { range: '401-600', count: assignedStudents.filter((s) => (s.score || 0) >= 401 && (s.score || 0) <= 600).length },
-          { range: '600+', count: assignedStudents.filter((s) => (s.score || 0) > 600).length },
+          { range: '0-100', count: filteredStudents.filter((s) => (s.score || 0) < 100).length },
+          { range: '101-250', count: filteredStudents.filter((s) => (s.score || 0) >= 101 && (s.score || 0) <= 250).length },
+          { range: '251-400', count: filteredStudents.filter((s) => (s.score || 0) >= 251 && (s.score || 0) <= 400).length },
+          { range: '401-600', count: filteredStudents.filter((s) => (s.score || 0) >= 401 && (s.score || 0) <= 600).length },
+          { range: '600+', count: filteredStudents.filter((s) => (s.score || 0) > 600).length },
         ],
         performanceOverTime: [
           { minute: '15m', avgScore: 35, submissionsCount: 18 },
@@ -5593,6 +6404,17 @@ app.get('/api/faculty/analytics/performance', authenticateFaculty, (req, res) =>
 // 20. Faculty Question Analytics (Read-Only)
 app.get('/api/faculty/analytics/questions', authenticateFaculty, (req, res) => {
   const fac = (req as any).user;
+  const requestedContestId = req.query.contestId as string | undefined;
+  if (requestedContestId) {
+    const { error } = getFacultyTargetContest(fac, requestedContestId);
+    if (error === 'FORBIDDEN') {
+      return res.status(403).json({ success: false, message: 'Access Denied: You are not assigned to supervise this contest.' });
+    }
+    if (error === 'NOT_FOUND') {
+      return res.status(404).json({ success: false, message: 'Contest not found.' });
+    }
+  }
+
   const assignedStudents = getFacultyAssignedStudents(fac);
   const assignedIds = new Set(assignedStudents.map((s) => s.id));
 
@@ -5623,12 +6445,29 @@ app.get('/api/faculty/analytics/questions', authenticateFaculty, (req, res) => {
 // 21. Faculty Difficulty Analytics (Read-Only)
 app.get('/api/faculty/analytics/difficulty', authenticateFaculty, (req, res) => {
   const fac = (req as any).user;
+  const requestedContestId = req.query.contestId as string | undefined;
+  let targetContest: any = null;
+  if (requestedContestId) {
+    const { error, contest } = getFacultyTargetContest(fac, requestedContestId);
+    if (error === 'FORBIDDEN') {
+      return res.status(403).json({ success: false, message: 'Access Denied: You are not assigned to supervise this contest.' });
+    }
+    if (error === 'NOT_FOUND') {
+      return res.status(404).json({ success: false, message: 'Contest not found.' });
+    }
+    targetContest = contest;
+  }
+
   const assignedStudents = getFacultyAssignedStudents(fac);
+  const contestParticipantIds = targetContest?.participantIds ? new Set(targetContest.participantIds) : null;
+  const filteredStudents = contestParticipantIds && contestParticipantIds.size > 0
+    ? assignedStudents.filter((s) => contestParticipantIds.has(s.id))
+    : assignedStudents;
 
   const levels = Array.from({ length: 10 }, (_, i) => i + 1);
   const matrix = levels.map((lvl) => {
     const questionsAtLvl = db.questions.filter((q) => q.difficulty === lvl);
-    const studentsAtLvl = assignedStudents.filter((s) => s.currentDifficulty === lvl).length;
+    const studentsAtLvl = filteredStudents.filter((s) => s.currentDifficulty === lvl).length;
     const baseAttempts = questionsAtLvl.reduce((acc, q) => acc + (q.attemptsCount || 0), 0);
     const avgSuccess = questionsAtLvl.length
       ? Math.round(questionsAtLvl.reduce((acc, q) => acc + (q.successRate || 50), 0) / questionsAtLvl.length)
@@ -6039,38 +6878,215 @@ const scanKotlinSandboxSecurity = (code: string): { isSafe: boolean; violation?:
   return { isSafe: true };
 };
 
-// 0. Student Published Contests List
+// Helper: Calculate authoritative remaining time in seconds based on backend start time and contest end
+function calculateAuthoritativeRemainingSeconds(session: any, contest: any): number {
+  if (!session || !session.startedAt || session.sessionStatus === 'NOT_STARTED') {
+    return (contest?.durationMinutes || 120) * 60;
+  }
+  if (session.sessionStatus === 'COMPLETED' || session.sessionStatus === 'EXPIRED') {
+    return 0;
+  }
+  const startedMs = new Date(session.startedAt).getTime();
+  const durationMs = (session.durationMinutes || contest?.durationMinutes || 120) * 60 * 1000;
+  const studentDeadline = startedMs + durationMs;
+  const contestEndMs = contest?.endTime ? new Date(contest.endTime).getTime() : Infinity;
+  const effectiveDeadline = Math.min(studentDeadline, contestEndMs);
+  const now = Date.now();
+  const remaining = Math.max(0, Math.floor((effectiveDeadline - now) / 1000));
+  return remaining;
+}
+
+// Helper: Authoritatively determine if student currently has an ACTIVE contest session
+function getStudentActiveContestSession(studentId: string): { session: any; contest: any; remainingSeconds: number } | null {
+  const studentSessions = db.sessions.filter(
+    (s) => s.studentId === studentId && s.sessionStatus === 'ACTIVE'
+  );
+
+  for (const session of studentSessions) {
+    if (!session.startedAt) continue;
+    const contestId = session.contestId || 'contest_1';
+    const contest = db.contests.find((c) => c.id === contestId);
+
+    if (!contest || contest.status === 'ENDED' || contest.status === 'CANCELLED') {
+      session.sessionStatus = 'EXPIRED';
+      continue;
+    }
+
+    const remaining = calculateAuthoritativeRemainingSeconds(session, contest);
+    if (remaining <= 0) {
+      session.sessionStatus = 'EXPIRED';
+      continue;
+    }
+
+    return { session, contest, remainingSeconds: remaining };
+  }
+
+  return null;
+}
+
+// Helper: Authoritatively compute Global Contest Status vs Student Attempt Status
+function computeContestStatuses(contest: any, studentId?: string) {
+  const now = Date.now();
+  const startTime = contest.startTime ? new Date(contest.startTime).getTime() : 0;
+  const endTime = contest.endTime ? new Date(contest.endTime).getTime() : Infinity;
+
+  // 1. Global Contest Status: UPCOMING, AVAILABLE, IN_PROGRESS, ENDED, CLOSED
+  let globalStatus: 'UPCOMING' | 'AVAILABLE' | 'IN_PROGRESS' | 'ENDED' | 'CLOSED' = 'AVAILABLE';
+
+  if (contest.status === 'ENDED') {
+    globalStatus = 'ENDED';
+  } else if (contest.status === 'CANCELLED' || contest.status === 'DELETED') {
+    globalStatus = 'CLOSED';
+  } else if (contest.status === 'SCHEDULED' || (startTime > 0 && startTime > now)) {
+    globalStatus = 'UPCOMING';
+  } else if (contest.status === 'ACTIVE') {
+    if (now >= startTime && now <= endTime) {
+      globalStatus = 'IN_PROGRESS';
+    } else if (now > endTime) {
+      globalStatus = 'ENDED';
+    } else {
+      globalStatus = 'AVAILABLE';
+    }
+  } else {
+    globalStatus = 'AVAILABLE';
+  }
+
+  // 2. Student Attempt Status: NOT_STARTED, IN_PROGRESS, COMPLETED, EXPIRED, CANCELLED
+  let attemptStatus: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'EXPIRED' | 'CANCELLED' = 'NOT_STARTED';
+  let studentSession: any = null;
+  let remainingSeconds = (contest.durationMinutes || 120) * 60;
+
+  if (studentId) {
+    studentSession = db.sessions.find(
+      (s) => s.studentId === studentId && (s.contestId === contest.id || (!s.contestId && contest.id === 'contest_1'))
+    );
+
+    if (studentSession) {
+      if (studentSession.sessionStatus === 'COMPLETED') {
+        attemptStatus = 'COMPLETED';
+        remainingSeconds = 0;
+      } else if (studentSession.sessionStatus === 'EXPIRED') {
+        attemptStatus = 'EXPIRED';
+        remainingSeconds = 0;
+      } else if (studentSession.sessionStatus === 'CANCELLED') {
+        attemptStatus = 'CANCELLED';
+        remainingSeconds = 0;
+      } else if (studentSession.sessionStatus === 'ACTIVE' && studentSession.startedAt) {
+        remainingSeconds = calculateAuthoritativeRemainingSeconds(studentSession, contest);
+        if (remainingSeconds <= 0 || globalStatus === 'ENDED') {
+          attemptStatus = 'EXPIRED';
+          studentSession.sessionStatus = 'EXPIRED';
+          remainingSeconds = 0;
+        } else {
+          attemptStatus = 'IN_PROGRESS';
+        }
+      } else {
+        attemptStatus = 'NOT_STARTED';
+      }
+    }
+  }
+
+  return {
+    globalStatus,
+    attemptStatus,
+    session: studentSession,
+    remainingSeconds,
+  };
+}
+
+// 0. Student Published Contests List with Decoupled Global & Attempt Statuses
 app.get('/api/student/contests', authenticateStudent, (req, res) => {
   const student = (req as any).user;
+  const activeContestInfo = getStudentActiveContestSession(student.id);
 
   // Filter published contests
   const publishedContests = db.contests.filter((c) => c.status !== 'DRAFT' && c.isPublished !== false);
 
   const mapped = publishedContests.map((c) => {
-    const isJoined = Array.isArray(c.participantIds) && c.participantIds.includes(student.id);
+    const isEnrolled = Array.isArray(c.participantIds) && c.participantIds.includes(student.id);
     const count = Array.isArray(c.participantIds) ? c.participantIds.length : (c.participantsCount || 0);
-    const isFull = Boolean(c.maxParticipants && count >= c.maxParticipants && !isJoined);
+    const isFull = Boolean(c.maxParticipants && count >= c.maxParticipants && !isEnrolled);
+
+    const statuses = computeContestStatuses(c, student.id);
+    const isThisActive = activeContestInfo?.contest.id === c.id;
+    const hasActiveContest = !!activeContestInfo && activeContestInfo.contest.id !== c.id;
 
     return {
       id: c.id,
       name: c.name,
       description: c.description,
-      status: c.status,
+      status: statuses.globalStatus, // Backwards compatible
+      globalStatus: statuses.globalStatus,
+      attemptStatus: statuses.attemptStatus,
+      sessionStatus: statuses.attemptStatus, // Backwards compatible
       date: c.date,
       startTime: c.startTime,
       endTime: c.endTime,
-      durationMinutes: c.durationMinutes,
+      durationMinutes: c.durationMinutes || 120,
       maxParticipants: c.maxParticipants,
       participantsCount: count,
-      difficultyRange: c.difficultyRange,
+      difficultyRange: c.difficultyRange || [1, 10],
       questionCount: Array.isArray(c.questionIds) ? c.questionIds.length : (c.questionCount || 0),
-      isJoined,
+      maxPoints: c.maxPoints || 100,
+      maxSkips: c.maxSkips || 3,
+      isEnrolled,
+      isJoined: isEnrolled,
       isFull,
-      code: isJoined ? c.code : undefined, // Reveal code only if already enrolled
+      code: isEnrolled ? c.code : undefined,
+      score: statuses.session?.score || 0,
+      solvedCount: statuses.session?.solvedCount || 0,
+      attemptsCount: statuses.session?.attemptsCount || 0,
+      rank: statuses.session?.rank || student.rank || 1,
+      startedAt: statuses.session?.startedAt || null,
+      completedAt: statuses.session?.completedAt || null,
+      remainingSeconds: statuses.remainingSeconds,
+      isThisActive,
+      hasActiveContest,
+      activeContestId: activeContestInfo?.contest.id,
+      activeContestName: activeContestInfo?.contest.name,
     };
   });
 
-  res.json({ success: true, count: mapped.length, data: mapped });
+  // Support search, status filter, and sort
+  let filtered = [...mapped];
+  const { search, status: statusFilter, sort } = req.query as Record<string, string>;
+
+  if (search) {
+    const q = search.toLowerCase().trim();
+    filtered = filtered.filter(
+      (c) => c.name.toLowerCase().includes(q) || (c.description && c.description.toLowerCase().includes(q))
+    );
+  }
+
+  if (statusFilter && statusFilter !== 'ALL') {
+    filtered = filtered.filter((c) => c.globalStatus === statusFilter || c.attemptStatus === statusFilter);
+  }
+
+  if (sort === 'name') {
+    filtered.sort((a, b) => a.name.localeCompare(b.name));
+  } else if (sort === 'duration') {
+    filtered.sort((a, b) => a.durationMinutes - b.durationMinutes);
+  } else {
+    const priority: Record<string, number> = {
+      IN_PROGRESS: 0,
+      AVAILABLE: 1,
+      UPCOMING: 2,
+      ENDED: 3,
+      CLOSED: 4,
+    };
+    filtered.sort((a, b) => (priority[a.globalStatus] ?? 9) - (priority[b.globalStatus] ?? 9));
+  }
+
+  res.json({
+    success: true,
+    count: filtered.length,
+    activeContest: activeContestInfo ? {
+      id: activeContestInfo.contest.id,
+      name: activeContestInfo.contest.name,
+      timeRemainingSeconds: activeContestInfo.remainingSeconds,
+    } : null,
+    data: filtered,
+  });
 });
 
 // 0b. Student Join Contest via Contest Code
@@ -6211,6 +7227,19 @@ app.post('/api/student/contests/join', authenticateStudent, (req, res) => {
     'STUDENT_JOINED_CONTEST',
     `Student ${student.name} (${student.email}) entered contest "${contest.name}" using access code ${cleanCode}`
   );
+
+  recordActivityEvent({
+    studentId: student.id,
+    studentName: student.name,
+    studentEmail: student.email,
+    contestId: contest.id,
+    contestName: contest.name,
+    sessionId: session?.id,
+    action: 'CONTEST_JOINED',
+    status: 'SUCCESS',
+    details: `Successfully registered and joined "${contest.name}" using access code.`,
+    metadata: { accessCode: cleanCode, durationMinutes: contest.durationMinutes }
+  });
 
   return res.status(200).json({
     success: true,
@@ -6394,51 +7423,7 @@ const DEFAULT_CONTEST_INSTRUCTIONS = [
   'Ensure you submit your solutions or finish the contest before the authoritative contest timer expires.'
 ];
 
-// Helper: Calculate authoritative remaining time in seconds based on backend start time and contest end
-function calculateAuthoritativeRemainingSeconds(session: any, contest: any): number {
-  if (!session || !session.startedAt || session.sessionStatus === 'NOT_STARTED') {
-    return (contest?.durationMinutes || 120) * 60;
-  }
-  if (session.sessionStatus === 'COMPLETED' || session.sessionStatus === 'EXPIRED') {
-    return 0;
-  }
-  const startedMs = new Date(session.startedAt).getTime();
-  const durationMs = (session.durationMinutes || contest?.durationMinutes || 120) * 60 * 1000;
-  const studentDeadline = startedMs + durationMs;
-  const contestEndMs = contest?.endTime ? new Date(contest.endTime).getTime() : Infinity;
-  const effectiveDeadline = Math.min(studentDeadline, contestEndMs);
-  const now = Date.now();
-  const remaining = Math.max(0, Math.floor((effectiveDeadline - now) / 1000));
-  return remaining;
-}
 
-// Helper: Authoritatively determine if student currently has an ACTIVE contest session
-function getStudentActiveContestSession(studentId: string): { session: any; contest: any; remainingSeconds: number } | null {
-  const studentSessions = db.sessions.filter(
-    (s) => s.studentId === studentId && s.sessionStatus === 'ACTIVE'
-  );
-
-  for (const session of studentSessions) {
-    if (!session.startedAt) continue;
-    const contestId = session.contestId || 'contest_1';
-    const contest = db.contests.find((c) => c.id === contestId);
-
-    if (!contest || contest.status === 'ENDED' || contest.status === 'CANCELLED') {
-      session.sessionStatus = 'EXPIRED';
-      continue;
-    }
-
-    const remaining = calculateAuthoritativeRemainingSeconds(session, contest);
-    if (remaining <= 0) {
-      session.sessionStatus = 'EXPIRED';
-      continue;
-    }
-
-    return { session, contest, remainingSeconds: remaining };
-  }
-
-  return null;
-}
 
 // Helper: Sanitize question for student view (STRICTLY NO HIDDEN TEST CASES OR SECRETS)
 const sanitizeQuestionForStudent = (
@@ -6735,6 +7720,19 @@ app.post('/api/student/contest/start', authenticateStudent, (req, res) => {
       });
     }
 
+    recordActivityEvent({
+      studentId: student.id,
+      studentName: student.name,
+      studentEmail: student.email,
+      contestId: contest.id,
+      contestName: contest.name,
+      sessionId: session.id,
+      action: 'CONTEST_RESUMED',
+      status: 'INFO',
+      details: `Resumed active contest session for "${contest.name}" (${Math.floor(remainingSeconds / 60)} minutes remaining).`,
+      metadata: { remainingSeconds }
+    });
+
     return res.json({
       success: true,
       message: 'Active contest session resumed.',
@@ -6802,6 +7800,19 @@ app.post('/api/student/contest/start', authenticateStudent, (req, res) => {
     `Student ${student.name} initiated official contest attempt for "${contest.name}". Timer started (${durationMinutes} min).`
   );
 
+  recordActivityEvent({
+    studentId: student.id,
+    studentName: student.name,
+    studentEmail: student.email,
+    contestId: contest.id,
+    contestName: contest.name,
+    sessionId: session.id,
+    action: 'CONTEST_STARTED',
+    status: 'SUCCESS',
+    details: `Started official contest attempt for "${contest.name}". Timer initialized (${durationMinutes} min).`,
+    metadata: { durationMinutes, assignedQuestionsCount: assignedQuestionsPool.length }
+  });
+
   broadcastEvent('CONTEST_SESSION_STARTED', {
     studentId: student.id,
     contestId: contest.id,
@@ -6846,16 +7857,28 @@ app.get('/api/student/contest/state', authenticateStudent, (req, res) => {
     });
   }
 
-  let contest = requestedContestId
-    ? db.contests.find((c) => c.id === requestedContestId)
-    : (activeContestInfo?.contest ||
-       db.contests.find((c) => c.status === 'ACTIVE' && Array.isArray(c.participantIds) && c.participantIds.includes(student.id)) ||
-       db.contests.find((c) => Array.isArray(c.participantIds) && c.participantIds.includes(student.id)) ||
-       db.contests.find((c) => c.status === 'ACTIVE') ||
-       db.contests[0]);
+  // When no specific contestId is requested, return selection state so the student can browse all available contests
+  if (!requestedContestId) {
+    return res.json({
+      success: true,
+      data: {
+        noContestSelected: true,
+        hasActiveContest: !!activeContestInfo,
+        activeContest: activeContestInfo
+          ? {
+              id: activeContestInfo.contest.id,
+              name: activeContestInfo.contest.name,
+              code: activeContestInfo.contest.code,
+              timeRemainingSeconds: activeContestInfo.remainingSeconds,
+            }
+          : null,
+      },
+    });
+  }
 
+  const contest = db.contests.find((c) => c.id === requestedContestId);
   if (!contest) {
-    return res.status(404).json({ success: false, message: 'No active contest found.' });
+    return res.status(404).json({ success: false, message: 'Contest not found.' });
   }
 
   // Verify enrollment
@@ -6873,13 +7896,46 @@ app.get('/api/student/contest/state', authenticateStudent, (req, res) => {
     });
   }
 
-  // Find student session
-  let session = db.sessions.find(
-    (s) => s.studentId === student.id && (s.contestId === contest.id || (!s.contestId && contest.id === 'contest_1'))
-  );
+  // Compute decoupled global and attempt statuses
+  const statuses = computeContestStatuses(contest, student.id);
+  const session = statuses.session;
+
+  // If contest has ended globally, or student attempt is COMPLETED or EXPIRED:
+  if (statuses.globalStatus === 'ENDED' || statuses.attemptStatus === 'COMPLETED' || statuses.attemptStatus === 'EXPIRED') {
+    return res.json({
+      success: true,
+      data: {
+        contest: {
+          id: contest.id,
+          name: contest.name,
+          code: contest.code,
+          status: statuses.globalStatus,
+          globalStatus: statuses.globalStatus,
+          attemptStatus: statuses.attemptStatus,
+          durationMinutes: contest.durationMinutes || 120,
+          isJoined: true,
+          isEnded: statuses.globalStatus === 'ENDED',
+        },
+        sessionState: statuses.attemptStatus,
+        attemptStatus: statuses.attemptStatus,
+        globalStatus: statuses.globalStatus,
+        isStarted: statuses.attemptStatus !== 'NOT_STARTED',
+        isEnded: statuses.globalStatus === 'ENDED',
+        timeRemainingSeconds: 0,
+        session: {
+          score: session?.score || 0,
+          solvedCount: session?.solvedCount || 0,
+          attemptsCount: session?.attemptsCount || 0,
+          startedAt: session?.startedAt,
+          completedAt: session?.completedAt || (contest as any).endedAt || new Date().toISOString(),
+          rank: session?.rank || student.rank || 1,
+        },
+      },
+    });
+  }
 
   // If student has NOT started the contest yet, inform frontend so Question Paper Preview is rendered!
-  if (!session || !session.startedAt || session.sessionStatus === 'NOT_STARTED') {
+  if (statuses.attemptStatus === 'NOT_STARTED' || !session || !session.startedAt) {
     return res.json({
       success: true,
       data: {
@@ -6888,57 +7944,26 @@ app.get('/api/student/contest/state', authenticateStudent, (req, res) => {
           name: contest.name,
           code: contest.code,
           description: contest.description,
-          status: contest.status,
+          status: statuses.globalStatus,
+          globalStatus: statuses.globalStatus,
+          attemptStatus: 'NOT_STARTED',
           durationMinutes: contest.durationMinutes || 120,
           startTime: contest.startTime,
           endTime: contest.endTime,
           isJoined: true,
         },
         sessionState: 'NOT_STARTED',
+        attemptStatus: 'NOT_STARTED',
+        globalStatus: statuses.globalStatus,
         isStarted: false,
-        canStart: true,
+        canStart: statuses.globalStatus === 'AVAILABLE' || statuses.globalStatus === 'IN_PROGRESS',
         totalQuestions: (contest.questionIds || []).length,
       },
     });
   }
 
-  // Calculate authoritative remaining seconds
-  const remainingSeconds = calculateAuthoritativeRemainingSeconds(session, contest);
-
-  // Auto-expire if timer ran out
-  if (remainingSeconds <= 0 && session.sessionStatus === 'ACTIVE') {
-    session.sessionStatus = 'EXPIRED';
-  }
-
-  // If contest completed or expired
-  if (session.sessionStatus === 'COMPLETED' || session.sessionStatus === 'EXPIRED') {
-    return res.json({
-      success: true,
-      data: {
-        contest: {
-          id: contest.id,
-          name: contest.name,
-          code: contest.code,
-          status: contest.status,
-          durationMinutes: contest.durationMinutes || 120,
-          isJoined: true,
-        },
-        sessionState: session.sessionStatus,
-        isStarted: true,
-        timeRemainingSeconds: 0,
-        session: {
-          score: session.score || 0,
-          solvedCount: session.solvedCount || 0,
-          attemptsCount: session.attemptsCount || 0,
-          startedAt: session.startedAt,
-          completedAt: session.completedAt || new Date().toISOString(),
-          rank: student.rank || 1,
-        },
-      },
-    });
-  }
-
   // Student is IN PROGRESS (ACTIVE session): Prepare all assigned questions
+  const remainingSeconds = statuses.remainingSeconds;
   session.lastActivity = new Date().toISOString();
   session.timeRemainingSeconds = remainingSeconds;
 
@@ -7048,6 +8073,14 @@ app.post('/api/student/contest/save-draft', authenticateStudent, (req, res) => {
     });
   }
 
+  const contest = contestId ? db.contests.find((c) => c.id === contestId) : null;
+  if (contest && (contest.status === 'ENDED' || contest.status === 'CANCELLED')) {
+    return res.status(403).json({
+      success: false,
+      message: 'Contest has ended. Edits can no longer be saved.',
+    });
+  }
+
   const session = db.sessions.find(
     (s) => s.studentId === student.id && (s.contestId === contestId || (!s.contestId && contestId === 'contest_1'))
   );
@@ -7064,6 +8097,22 @@ app.post('/api/student/contest/save-draft', authenticateStudent, (req, res) => {
     };
     session.lastActivity = new Date().toISOString();
   }
+
+  const q = db.questions.find((item) => item.id === questionId);
+  const lineCount = typeof code === 'string' ? code.split('\n').length : 0;
+  recordActivityEvent({
+    studentId: student.id,
+    studentName: student.name,
+    studentEmail: student.email,
+    contestId: contestId || session?.contestId,
+    sessionId: session?.id,
+    questionId,
+    questionTitle: q?.title,
+    action: 'CODE_SAVED',
+    status: 'INFO',
+    details: `Saved solution draft for "${q?.title || questionId}" (${lineCount} lines, ${language})`,
+    metadata: { lineCount, language }
+  });
 
   res.json({ success: true, message: 'Draft saved' });
 });
@@ -7096,6 +8145,19 @@ app.post('/api/student/contest/finish', authenticateStudent, (req, res) => {
     'STUDENT_FINISHED_CONTEST',
     `Student ${student.name} finalized contest attempt for "${contest?.name}". Final score: ${session.score || 0} pts.`
   );
+
+  recordActivityEvent({
+    studentId: student.id,
+    studentName: student.name,
+    studentEmail: student.email,
+    contestId: contest?.id,
+    contestName: contest?.name,
+    sessionId: session.id,
+    action: 'CONTEST_FINISHED',
+    status: 'SUCCESS',
+    details: `Contest attempt finalized. Tournament score: ${session.score || 0} pts, Solved: ${session.solvedCount || 0} problems.`,
+    metadata: { score: session.score, solvedCount: session.solvedCount, attemptsCount: session.attemptsCount }
+  });
 
   broadcastEvent('CONTEST_SESSION_COMPLETED', {
     studentId: student.id,
@@ -7173,6 +8235,19 @@ app.post(['/api/student/run-code', '/api/student/contest/run'], authenticateStud
   // Syntax and Compilation check
   const hasSolutionClass = code.includes('class Solution') || code.includes('fun main') || code.includes('fun ');
   if (!hasSolutionClass) {
+    recordActivityEvent({
+      studentId: student.id,
+      studentName: student.name,
+      studentEmail: student.email,
+      contestId,
+      questionId: question.id,
+      questionTitle: question.title,
+      action: 'COMPILATION_ERROR',
+      status: 'FAILED',
+      details: `Code compilation failed for "${question.title}": Missing entry point or Solution class.`,
+      metadata: { stderr: 'Unresolved reference: Missing class Solution or function declaration.', executionTime: '22 ms' }
+    });
+
     return res.json({
       success: true,
       data: {
@@ -7200,6 +8275,19 @@ app.post(['/api/student/run-code', '/api/student/contest/run'], authenticateStud
 
   const execTime = `${Math.floor(25 + Math.random() * 30)} ms`;
   const memoryUsed = `${(14.2 + Math.random() * 3).toFixed(1)} MB`;
+
+  recordActivityEvent({
+    studentId: student.id,
+    studentName: student.name,
+    studentEmail: student.email,
+    contestId,
+    questionId: question.id,
+    questionTitle: question.title,
+    action: 'RUN_CODE_COMPLETED',
+    status: 'SUCCESS',
+    details: `Compiled and tested "${question.title}" (${results.length}/${visibleTests.length || 2} visible tests passed in ${execTime}).`,
+    metadata: { testCasesPassed: results.length, totalTestCases: visibleTests.length || 2, executionTime: execTime, memory: memoryUsed }
+  });
 
   res.json({
     success: true,
@@ -7257,6 +8345,17 @@ app.post(['/api/student/submit-code', '/api/student/contest/submit'], authentica
     (s) => s.studentId === student.id && (s.contestId === contest?.id || (!s.contestId && contest?.id === 'contest_1'))
   );
 
+  if (contest && (contest.status === 'ENDED' || contest.status === 'CANCELLED')) {
+    if (session && session.sessionStatus === 'ACTIVE') {
+      session.sessionStatus = 'EXPIRED';
+    }
+    return res.status(403).json({
+      success: false,
+      status: 'CONTEST_ENDED',
+      message: `Contest "${contest.name}" has been ended by administration. Submissions are no longer accepted.`,
+    });
+  }
+
   if (session && session.startedAt) {
     const remainingSeconds = calculateAuthoritativeRemainingSeconds(session, contest);
     if (remainingSeconds <= 0 || session.sessionStatus === 'COMPLETED' || session.sessionStatus === 'EXPIRED') {
@@ -7297,6 +8396,20 @@ app.post(['/api/student/submit-code', '/api/student/contest/submit'], authentica
     };
     db.submissions.unshift(failedSub);
     student.attemptsCount = (student.attemptsCount || 0) + 1;
+
+    recordActivityEvent({
+      studentId: student.id,
+      studentName: student.name,
+      studentEmail: student.email,
+      contestId: contest?.id,
+      sessionId: session?.id,
+      questionId: question.id,
+      questionTitle: question.title,
+      action: 'COMPILATION_ERROR',
+      status: 'ERROR',
+      details: `Submission compilation failed for "${question.title}": Syntax error in Kotlin source code.`,
+      metadata: { compilerOutput: failedSub.compilerOutput, language }
+    });
 
     if (session) {
       session.attemptsCount = (session.attemptsCount || 0) + 1;
@@ -7395,18 +8508,28 @@ app.post(['/api/student/submit-code', '/api/student/contest/submit'], authentica
   activeStudents.forEach((s, idx) => { s.rank = idx + 1; });
 
   // Append Activity Log
-  const actRecord = {
-    id: `act_${Date.now()}`,
-    timestamp: new Date().toISOString(),
+  recordActivityEvent({
     studentId: student.id,
     studentName: student.name,
-    action: 'SUBMISSION' as const,
-    details: `Submitted code for question "${question.title}" (Level ${question.difficulty}) - ACCEPTED (+${actualScoreToAdd} pts)`,
-    ipAddress: '127.0.0.1',
-    device: 'Windows 11 Pro / Chrome 124.0',
-    sessionId: session?.id || `sess_${student.id}`,
-  };
-  db.activityLogs.unshift(actRecord);
+    studentEmail: student.email,
+    contestId: contest?.id,
+    contestName: contest?.name,
+    sessionId: session?.id,
+    questionId: question.id,
+    questionTitle: question.title,
+    action: 'SUBMISSION_ACCEPTED',
+    status: 'ACCEPTED',
+    details: `Solution accepted for "${question.title}" (Level ${question.difficulty}) - Passed 6/6 test cases (+${actualScoreToAdd} pts) in ${execTimeMs}ms`,
+    metadata: {
+      scoreAwarded: actualScoreToAdd,
+      executionTimeMs: execTimeMs,
+      memoryUsed,
+      testCasesPassed: 6,
+      totalTestCases: 6,
+      newTotalScore: session?.score || student.score,
+      language
+    }
+  });
 
   // Telemetry Broadcast
   broadcastEvent('SUBMISSION_UPDATE', submissionRecord);
@@ -7480,16 +8603,18 @@ app.post('/api/student/skip-question', authenticateStudent, (req, res) => {
   student.score = Math.max(0, (student.score || 0) - skipPenalty);
   student.skippedCount = newSkippedCount;
 
-  db.activityLogs.unshift({
-    id: `act_${Date.now()}`,
-    timestamp: new Date().toISOString(),
+  recordActivityEvent({
     studentId: student.id,
     studentName: student.name,
-    action: 'QUESTION_SKIPPED' as const,
+    studentEmail: student.email,
+    contestId: contest?.id,
+    sessionId: session?.id,
+    questionId: question.id,
+    questionTitle: question.title,
+    action: 'QUESTION_SKIPPED',
+    status: 'WARNING',
     details: `Skipped Question "${question.title}" (Level ${question.difficulty}) - Deduction: ${skipPenalty} pts. Skips Remaining: ${remainingSkips}/${maxSkips}. Reason: ${reason || 'Student skipped problem'}`,
-    ipAddress: '127.0.0.1',
-    device: 'Chrome 124.0 / Windows 11',
-    sessionId: session?.id || `sess_${student.id}`,
+    metadata: { skipPenalty, remainingSkips, maxSkips, reason: reason || 'Student skipped problem' }
   });
 
   const activeStudents = db.users
@@ -7513,6 +8638,63 @@ app.post('/api/student/skip-question', authenticateStudent, (req, res) => {
       questionStatus: 'SKIPPED',
     },
   });
+});
+
+// 9. Question Opened / Switched Telemetry API
+app.post('/api/student/contest/question-opened', authenticateStudent, (req, res) => {
+  const student = (req as any).user;
+  const { contestId, questionId, questionNumber, previousQuestionId } = req.body;
+  const question = db.questions.find((q) => q.id === questionId);
+  const contest = db.contests.find((c) => c.id === contestId) || db.contests[0];
+  const session = db.sessions.find((s) => s.studentId === student.id && (s.contestId === contestId || !s.contestId));
+
+  if (session && questionId) {
+    session.currentQuestionId = questionId;
+    session.lastActivity = new Date().toISOString();
+  }
+
+  const hasAttempted = db.submissions.some((s) => s.studentId === student.id && s.questionId === questionId);
+  const isRevisit = Boolean(previousQuestionId && previousQuestionId !== questionId);
+  const action = isRevisit ? (hasAttempted ? 'QUESTION_REVISITED' : 'QUESTION_CHANGED') : 'QUESTION_OPENED';
+
+  const record = recordActivityEvent({
+    studentId: student.id,
+    studentName: student.name,
+    studentEmail: student.email,
+    contestId: contest?.id,
+    contestName: contest?.name,
+    sessionId: session?.id,
+    questionId,
+    questionTitle: question?.title || `Question ${questionNumber || 1}`,
+    questionNumber,
+    action,
+    status: 'INFO',
+    details: `${isRevisit ? 'Navigated to' : 'Opened'} Question ${questionNumber ? `Q${questionNumber}: ` : ''}"${question?.title || questionId}" (Level ${question?.difficulty || 1})`,
+    metadata: { previousQuestionId, difficulty: question?.difficulty, category: question?.category }
+  });
+
+  res.json({ success: true, data: record });
+});
+
+// 10. Student Telemetry Event API (Connection & UI Lifecycle)
+app.post('/api/student/contest/telemetry-event', authenticateStudent, (req, res) => {
+  const student = (req as any).user;
+  const { contestId, eventType, details } = req.body;
+  const validTypes = ['CONNECTION_LOST', 'CONNECTION_RESTORED', 'TAB_BLURRED', 'TAB_FOCUSED', 'FULLSCREEN_EXIT'];
+  const type = validTypes.includes(eventType) ? eventType : 'TELEMETRY_EVENT';
+
+  const record = recordActivityEvent({
+    studentId: student.id,
+    studentName: student.name,
+    studentEmail: student.email,
+    contestId,
+    action: type,
+    status: type === 'CONNECTION_RESTORED' ? 'SUCCESS' : type === 'CONNECTION_LOST' ? 'WARNING' : 'INFO',
+    details: details || `Telemetry event: ${type.replace(/_/g, ' ')}`,
+    metadata: { rawEvent: eventType }
+  });
+
+  res.json({ success: true, data: record });
 });
 
 // 6. Student Real-Time Live Leaderboard API

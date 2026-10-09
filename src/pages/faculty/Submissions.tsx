@@ -119,17 +119,24 @@ export default function FacultySubmissions() {
               <div className="p-3 rounded-xl bg-slate-800/80 border border-slate-700 flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2">
                   <span className="font-semibold text-slate-300">Verdict:</span>
-                  <span
-                    className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
-                      selectedSubmission.verdict === 'ACCEPTED'
-                        ? 'bg-emerald-950/60 text-emerald-400 border-emerald-500/30'
-                        : selectedSubmission.verdict === 'WRONG_ANSWER'
-                        ? 'bg-rose-950/60 text-rose-400 border-rose-500/30'
-                        : 'bg-amber-950/60 text-amber-400 border-amber-500/30'
-                    }`}
-                  >
-                    {selectedSubmission.verdict}
-                  </span>
+                  {(() => {
+                    const v = String(selectedSubmission.verdict || selectedSubmission.result || '').toUpperCase().trim();
+                    const isAccepted = v === 'ACCEPTED' || v === 'PASSED' || v === 'SUCCESS';
+                    const isWrong = v === 'WRONG_ANSWER' || v === 'FAILED' || v === 'REJECTED';
+                    return (
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                          isAccepted
+                            ? 'bg-emerald-950/60 text-emerald-400 border-emerald-500/30'
+                            : isWrong
+                            ? 'bg-rose-950/60 text-rose-400 border-rose-500/30'
+                            : 'bg-amber-950/60 text-amber-400 border-amber-500/30'
+                        }`}
+                      >
+                        {selectedSubmission.verdict || selectedSubmission.result || 'PENDING'}
+                      </span>
+                    );
+                  })()}
                 </div>
                 <div className="flex items-center gap-4 text-slate-300 font-mono text-xs">
                   <span>Time: <strong className="text-white">{selectedSubmission.executionTime}</strong></span>
@@ -263,24 +270,31 @@ export default function FacultySubmissions() {
                     </td>
 
                     <td className="p-4">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${
-                          sub.verdict === 'ACCEPTED'
-                            ? 'bg-emerald-950/60 text-emerald-400 border-emerald-500/30'
-                            : sub.verdict === 'WRONG_ANSWER'
-                            ? 'bg-rose-950/60 text-rose-400 border-rose-500/30'
-                            : 'bg-amber-950/60 text-amber-400 border-amber-500/30'
-                        }`}
-                      >
-                        {sub.verdict === 'ACCEPTED' ? (
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                        ) : sub.verdict === 'WRONG_ANSWER' ? (
-                          <XCircle className="w-3.5 h-3.5 text-rose-400" />
-                        ) : (
-                          <Clock className="w-3.5 h-3.5 text-amber-400" />
-                        )}
-                        {sub.verdict}
-                      </span>
+                      {(() => {
+                        const v = String(sub.verdict || sub.result || '').toUpperCase().trim();
+                        const isAccepted = v === 'ACCEPTED' || v === 'PASSED' || v === 'SUCCESS';
+                        const isWrong = v === 'WRONG_ANSWER' || v === 'FAILED' || v === 'REJECTED';
+                        return (
+                          <span
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${
+                              isAccepted
+                                ? 'bg-emerald-950/60 text-emerald-400 border-emerald-500/30'
+                                : isWrong
+                                ? 'bg-rose-950/60 text-rose-400 border-rose-500/30'
+                                : 'bg-amber-950/60 text-amber-400 border-amber-500/30'
+                            }`}
+                          >
+                            {isAccepted ? (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                            ) : isWrong ? (
+                              <XCircle className="w-3.5 h-3.5 text-rose-400" />
+                            ) : (
+                              <Clock className="w-3.5 h-3.5 text-amber-400" />
+                            )}
+                            {sub.verdict || sub.result || 'PENDING'}
+                          </span>
+                        );
+                      })()}
                     </td>
 
                     <td className="p-4 font-mono text-xs text-slate-300">

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Bell,
@@ -7,12 +7,9 @@ import {
   Check,
   AlertTriangle,
   Info,
-  ShieldAlert,
   ArrowRight,
-  Filter,
 } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Card';
-import { Badge } from '../../components/ui/Badge';
+import { Card, CardContent } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { apiClient } from '../../lib/api';
 import { Notification } from '../../types/admin';
@@ -43,17 +40,29 @@ export default function FacultyNotifications() {
     fetchNotifications();
   }, []);
 
+  useEffect(() => {
+    const unread = notifications.filter((n) => !n.read).length;
+    window.dispatchEvent(
+      new CustomEvent('faculty-notifications-updated', {
+        detail: { unreadCount: unread },
+      })
+    );
+  }, [notifications]);
+
   const handleMarkRead = async (id: string) => {
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+    );
     try {
       const resp = await apiClient.patch(`/faculty/notifications/${id}/read`);
       if (resp.success) {
-        setNotifications((prev) =>
-          prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-        );
         showToast('success', 'Notification marked as read');
+      } else {
+        fetchNotifications();
       }
     } catch (err) {
       showToast('error', 'Failed to update notification');
+      fetchNotifications();
     }
   };
 

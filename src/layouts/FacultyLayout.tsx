@@ -144,6 +144,10 @@ export function FacultyLayout() {
             fetchBadges();
             fetchRecentNotifs();
           }
+          if (data.type === 'CONTEST_ASSIGNMENT_UPDATED' || data.type === 'CONTEST_UPDATED') {
+            window.dispatchEvent(new CustomEvent('faculty-contests-updated'));
+            fetchBadges();
+          }
         } catch (_) {}
       };
 
@@ -179,6 +183,15 @@ export function FacultyLayout() {
     fetchBadges();
     fetchRecentNotifs();
 
+    const handleNotifUpdate = (e: any) => {
+      if (typeof e.detail?.unreadCount === 'number') {
+        setBadges((prev) => ({ ...prev, unreadNotifications: e.detail.unreadCount }));
+      }
+      fetchRecentNotifs();
+    };
+
+    window.addEventListener('faculty-notifications-updated', handleNotifUpdate);
+
     const interval = setInterval(fetchBadges, 15000);
     return () => {
       if (eventSourceRef.current) {
@@ -189,6 +202,7 @@ export function FacultyLayout() {
         clearTimeout(retryTimerRef.current);
       }
       clearInterval(interval);
+      window.removeEventListener('faculty-notifications-updated', handleNotifUpdate);
     };
   }, []);
 

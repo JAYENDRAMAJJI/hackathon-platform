@@ -117,10 +117,49 @@ export function AdminLayout() {
   useEffect(() => {
     fetchBadges();
     fetchNotifications();
+
+    const handleNotifUpdate = (e: any) => {
+      if (typeof e.detail?.unreadCount === 'number') {
+        setBadges((prev) => ({ ...prev, unreadNotifications: e.detail.unreadCount }));
+      }
+      fetchNotifications();
+    };
+
+    window.addEventListener('admin-notifications-updated', handleNotifUpdate);
+
+    let es: EventSource | null = null;
+    try {
+      es = new EventSource('/api/events');
+      es.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.type === 'CONTEST_UPDATED' || payload.type === 'CONTEST_ASSIGNMENT_UPDATED') {
+            window.dispatchEvent(new CustomEvent('admin-contests-updated'));
+            window.dispatchEvent(new CustomEvent('admin-students-updated'));
+            window.dispatchEvent(new CustomEvent('admin-faculty-updated'));
+          } else if (payload.type === 'FACULTY_UPDATED' || payload.type === 'FACULTY_ASSIGNED_STUDENTS') {
+            window.dispatchEvent(new CustomEvent('admin-faculty-updated'));
+            window.dispatchEvent(new CustomEvent('admin-students-updated'));
+          } else if (payload.type === 'STUDENT_UPDATED' || payload.type === 'SUBMISSION_EVALUATED') {
+            window.dispatchEvent(new CustomEvent('admin-students-updated'));
+          }
+          if (payload.type === 'NOTIFICATION' || payload.type === 'AUDIT_LOG') {
+            fetchBadges();
+            fetchNotifications();
+          }
+        } catch (_) {}
+      };
+    } catch (_) {}
+
     const interval = setInterval(() => {
       fetchBadges();
     }, 12000);
-    return () => clearInterval(interval);
+
+    return () => {
+      if (es) es.close();
+      clearInterval(interval);
+      window.removeEventListener('admin-notifications-updated', handleNotifUpdate);
+    };
   }, []);
 
   // Close dropdowns on outside click
@@ -182,7 +221,7 @@ export function AdminLayout() {
           icon: Users,
           subItems: [
             { label: 'User Access', path: '/admin/users', icon: Users },
-            { label: 'Student Insights', path: '/admin/students', icon: GraduationCap },
+            { label: 'Student Management', path: '/admin/students', icon: GraduationCap },
             { label: 'Faculty Management', path: '/admin/faculty', icon: Briefcase },
             { label: 'Pending Approvals', path: '/admin/approvals', icon: UserCheck, badgeKey: 'pendingApprovals' },
             { label: 'Rejected Users', path: '/admin/rejected-users', icon: UserX },
@@ -307,7 +346,7 @@ export function AdminLayout() {
 
     const breadcrumbLabelMap: Record<string, string> = {
       'users': 'User Access',
-      'students': 'Student Insights',
+      'students': 'Student Management',
       'faculty': 'Faculty Management',
       'approvals': 'Pending Approvals',
       'rejected-users': 'Rejected Users',
@@ -605,10 +644,32 @@ export function AdminLayout() {
                       <div className="py-6 text-center text-xs text-slate-400">No new notifications</div>
                     ) : (
                       recentNotifs.map((n) => (
-                        <div key={n.id} className="py-2.5 hover:bg-slate-800/40 px-2 rounded-lg transition-colors">
+                        <div
+                          key={n.id}
+                          onClick={async () => {
+                            if (!n.read) {
+                              try {
+                                await apiClient.post(`/admin/notifications/${n.id}/read`);
+                                setRecentNotifs((prev) =>
+                                  prev.map((x) => (x.id === n.id ? { ...x, read: true } : x))
+                                );
+                                setBadges((prev) => ({
+                                  ...prev,
+                                  unreadNotifications: Math.max(0, prev.unreadNotifications - 1),
+                                }));
+                                window.dispatchEvent(new CustomEvent('admin-notifications-updated'));
+                              } catch (e) {}
+                            }
+                            if (n.link) {
+                              setNotifDropdownOpen(false);
+                              navigate(n.link);
+                            }
+                          }}
+                          className="py-2.5 hover:bg-slate-800/60 px-2 rounded-lg transition-colors cursor-pointer"
+                        >
                           <div className="text-xs font-semibold text-white flex items-center justify-between">
-                            <span>{n.title}</span>
-                            {!n.read && <span className="h-1.5 w-1.5 rounded-full bg-blue-500"></span>}
+                            <span className="truncate pr-2">{n.title}</span>
+                            {!n.read && <span className="h-1.5 w-1.5 rounded-full bg-blue-500 shrink-0"></span>}
                           </div>
                           <div className="text-[11px] text-slate-400 mt-0.5 line-clamp-2">{n.message}</div>
                         </div>

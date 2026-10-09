@@ -1105,6 +1105,23 @@ export const findMockUserByIdentifier = (identifier: string, requestedRole?: str
   return null;
 };
 
+export const getMockLoggedInUser = (): MockUser => {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      const raw = localStorage.getItem('auth_user');
+      if (raw) {
+        const u = JSON.parse(raw);
+        if (u && (u.id || u.email)) {
+          const match = mockUsers.find((m) => m.id === u.id || (m.email && m.email.toLowerCase() === u.email.toLowerCase()));
+          if (match) return match;
+          return u;
+        }
+      }
+    } catch {}
+  }
+  return mockUsers.find((u) => u.role === 'FACULTY') || mockUsers[2];
+};
+
 export function handleMockFallback(method: string, endpoint: string, body?: any, params?: any): any {
   const cleanEndpoint = endpoint.replace(/^\/api/, '').replace(/^\//, '').split('?')[0];
 
@@ -1840,11 +1857,13 @@ export function handleMockFallback(method: string, endpoint: string, body?: any,
 
   // 4. Badges & Dashboards
   if (cleanEndpoint === 'admin/badges') {
-    return { success: true, data: { pendingApprovals: 6, activeAnomalies: 3, unreadNotifications: 4, activeSessions: 45 } };
+    const unreadCount = mockNotifications.filter((n: any) => !n.read).length;
+    return { success: true, data: { pendingApprovals: 6, activeAnomalies: 3, unreadNotifications: unreadCount, activeSessions: 45 } };
   }
 
   if (cleanEndpoint === 'faculty/badges') {
-    return { success: true, data: { assignedStudents: 35, activeSessions: 18, activeAnomalies: 2, unreadNotifications: 3 } };
+    const unreadCount = mockNotifications.filter((n: any) => !n.read).length;
+    return { success: true, data: { assignedStudents: 35, activeSessions: 18, activeAnomalies: 2, unreadNotifications: unreadCount } };
   }
 
   if (cleanEndpoint === 'admin/dashboard') {
@@ -1860,10 +1879,18 @@ export function handleMockFallback(method: string, endpoint: string, body?: any,
     };
   }
 
-  // Leaderboard Filter Metadata
-  // Leaderboard Filter Metadata (Contexts fetched dynamically from mockContests)
+  // Leaderboard Filter Metadata (Contexts fetched dynamically from mockContests and scoped for faculty)
   if (cleanEndpoint === 'leaderboard/filters' || cleanEndpoint === 'leaderboard/contexts') {
-    const contexts = (mockContests || []).map((c) => ({
+    const loggedUser = getMockLoggedInUser();
+    let contextsPool = (mockContests || []).filter((c) => c.status !== 'DELETED');
+    if (loggedUser && loggedUser.role === 'FACULTY') {
+      contextsPool = contextsPool.filter((c) =>
+        (Array.isArray(c.assignedFacultyIds) && c.assignedFacultyIds.includes(loggedUser.id)) ||
+        (Array.isArray(c.assignedFaculty) && c.assignedFaculty.some((f: any) => f.id === loggedUser.id)) ||
+        (c as any).assignedFacultyId === loggedUser.id
+      );
+    }
+    const contexts = contextsPool.map((c) => ({
       id: c.id,
       name: c.name,
       status: c.status,
@@ -1879,6 +1906,11 @@ export function handleMockFallback(method: string, endpoint: string, body?: any,
       success: true,
       count: contexts.length,
       data: {
+        contexts,
+        contests: contexts,
+      },
+      contexts,
+      filterMeta: {
         contexts,
         contests: contexts,
       },
@@ -1898,7 +1930,20 @@ export function handleMockFallback(method: string, endpoint: string, body?: any,
       }
     }
 
-    const contexts = (mockContests || []).map((c) => ({
+    const loggedUser = getMockLoggedInUser();
+    let contextsPool = (mockContests || []).filter((c) => c.status !== 'DELETED');
+    if (cleanEndpoint.startsWith('faculty') || (loggedUser && loggedUser.role === 'FACULTY')) {
+      contextsPool = contextsPool.filter((c) =>
+        (Array.isArray(c.assignedFacultyIds) && c.assignedFacultyIds.includes(loggedUser.id)) ||
+        (Array.isArray(c.assignedFaculty) && c.assignedFaculty.some((f: any) => f.id === loggedUser.id)) ||
+        (c as any).assignedFacultyId === loggedUser.id
+      );
+      if (selectedContextId && selectedContextId !== 'ALL' && !contextsPool.some((c) => c.id === selectedContextId || c.code === selectedContextId)) {
+        return { success: false, status: 403, message: 'Access Denied: You are not assigned to supervise this contest context.' };
+      }
+    }
+
+    const contexts = contextsPool.map((c) => ({
       id: c.id,
       name: c.name,
       status: c.status,
@@ -1987,6 +2032,18 @@ export function handleMockFallback(method: string, endpoint: string, body?: any,
 
   // 6. Faculty Dashboard Endpoints
   if (cleanEndpoint === 'faculty/dashboard-kpis') {
+    const fac = getMockLoggedInUser();
+    const assigned = mockContests.filter((c) =>
+      c.status !== 'DELETED' && (
+        (Array.isArray(c.assignedFacultyIds) && c.assignedFacultyIds.includes(fac.id)) ||
+        (Array.isArray(c.assignedFaculty) && c.assignedFaculty.some((f: any) => f.id === fac.id)) ||
+        (c as any).assignedFacultyId === fac.id
+      )
+    );
+    const targetId = params?.contestId || params?.contextId;
+    if (targetId && targetId !== 'ALL' && !assigned.some((c) => c.id === targetId)) {
+      return { success: false, status: 403, message: 'Access Denied: You are not assigned to supervise this contest context.' };
+    }
     return {
       success: true,
       data: { assignedStudents: 35, activeStudents: 28, completedStudents: 2, inactiveStudents: 5, activeSessions: 28, totalSubmissions: 64, averageScore: 185, anomalies: 2 }
@@ -1994,15 +2051,31 @@ export function handleMockFallback(method: string, endpoint: string, body?: any,
   }
 
   if (cleanEndpoint === 'faculty/contest-status') {
+    const fac = getMockLoggedInUser();
+    const assigned = mockContests.filter((c) =>
+      c.status !== 'DELETED' && (
+        (Array.isArray(c.assignedFacultyIds) && c.assignedFacultyIds.includes(fac.id)) ||
+        (Array.isArray(c.assignedFaculty) && c.assignedFaculty.some((f: any) => f.id === fac.id)) ||
+        (c as any).assignedFacultyId === fac.id
+      )
+    );
+    const targetId = params?.contestId || params?.contextId;
+    if (targetId && targetId !== 'ALL' && !assigned.some((c) => c.id === targetId)) {
+      return { success: false, status: 403, message: 'Access Denied: You are not assigned to supervise this contest context.' };
+    }
+    const target = targetId ? assigned.find((c) => c.id === targetId) : assigned[0];
+    if (!target) {
+      return { success: true, data: { contest: null } };
+    }
     return {
       success: true,
       data: {
         contest: {
-          id: 'contest_1',
-          name: 'University Grand Hackathon 2026',
-          status: 'ACTIVE',
-          timeRemaining: '01:34:10',
-          totalParticipants: 71,
+          id: target.id,
+          name: target.name,
+          status: target.status,
+          timeRemaining: target.status === 'ACTIVE' ? '01:34:10' : '00:00:00',
+          totalParticipants: Array.isArray(target.participantIds) ? target.participantIds.length : (target.participantsCount || 71),
           assignedActiveParticipants: 28,
           assignedStudentsCount: 35
         }
@@ -2017,6 +2090,152 @@ export function handleMockFallback(method: string, endpoint: string, body?: any,
       { id: 'act_3', timestamp: new Date(Date.now() - 600000).toISOString(), studentName: 'Student One', action: 'QUESTION_SOLVED', details: 'Passed all 6 test cases for Two Sum Target Indices', scoreAdded: 35 },
     ];
     return { success: true, count: activities.length, data: activities };
+  }
+
+  if (
+    cleanEndpoint === 'faculty/timeline' ||
+    cleanEndpoint === 'admin/timeline' ||
+    (cleanEndpoint.startsWith('faculty/students/') && cleanEndpoint.endsWith('/timeline')) ||
+    (cleanEndpoint.startsWith('admin/students/') && cleanEndpoint.endsWith('/timeline'))
+  ) {
+    const studentMatch = cleanEndpoint.match(/students\/([^/]+)\/timeline/);
+    const targetStudentId = studentMatch ? studentMatch[1] : params?.studentId;
+    const targetStudent = targetStudentId ? mockUsers.find((u) => u.id === targetStudentId) : null;
+    const sName = targetStudent?.name || 'Student Candidate';
+
+    const mockEvents = [
+      {
+        id: 'act_tl_1',
+        timestamp: new Date(Date.now() - 1000 * 60 * 35).toISOString(),
+        studentId: targetStudentId || 'usr_stu_3',
+        studentName: sName,
+        action: 'CONTEST_STARTED',
+        status: 'SUCCESS',
+        details: 'Contest arena initiated and exam countdown commenced.',
+        sessionId: `sess_${targetStudentId || 'usr_stu_3'}`,
+        metadata: { timerDurationMinutes: 90, clientIp: '192.168.1.105' },
+      },
+      {
+        id: 'act_tl_2',
+        timestamp: new Date(Date.now() - 1000 * 60 * 33).toISOString(),
+        studentId: targetStudentId || 'usr_stu_3',
+        studentName: sName,
+        questionId: 'q_1',
+        questionTitle: 'Two Sum Target Indices',
+        action: 'QUESTION_OPENED',
+        status: 'INFO',
+        details: 'Opened question 1: Two Sum Target Indices (Difficulty Level 1).',
+        sessionId: `sess_${targetStudentId || 'usr_stu_3'}`,
+      },
+      {
+        id: 'act_tl_3',
+        timestamp: new Date(Date.now() - 1000 * 60 * 25).toISOString(),
+        studentId: targetStudentId || 'usr_stu_3',
+        studentName: sName,
+        questionId: 'q_1',
+        questionTitle: 'Two Sum Target Indices',
+        action: 'RUN_CODE_COMPLETED',
+        status: 'SUCCESS',
+        details: 'Ran code solution. 3 / 3 visible test cases passed.',
+        sessionId: `sess_${targetStudentId || 'usr_stu_3'}`,
+        metadata: { passedCount: 3, totalCount: 3, language: 'javascript', executionTimeMs: 42 },
+      },
+      {
+        id: 'act_tl_4',
+        timestamp: new Date(Date.now() - 1000 * 60 * 20).toISOString(),
+        studentId: targetStudentId || 'usr_stu_3',
+        studentName: sName,
+        questionId: 'q_1',
+        questionTitle: 'Two Sum Target Indices',
+        action: 'SUBMISSION_ACCEPTED',
+        status: 'ACCEPTED',
+        details: 'Passed 6 / 6 test cases for Two Sum Target Indices. Awarded +50 points.',
+        sessionId: `sess_${targetStudentId || 'usr_stu_3'}`,
+        metadata: { scoreAdded: 50, executionTimeMs: 45, language: 'javascript' },
+      },
+      {
+        id: 'act_tl_5',
+        timestamp: new Date(Date.now() - 1000 * 60 * 18).toISOString(),
+        studentId: targetStudentId || 'usr_stu_3',
+        studentName: sName,
+        questionId: 'q_2',
+        questionTitle: 'Valid Balanced Parentheses',
+        action: 'QUESTION_OPENED',
+        status: 'INFO',
+        details: 'Navigated to question 2: Valid Balanced Parentheses (Difficulty Level 2).',
+        sessionId: `sess_${targetStudentId || 'usr_stu_3'}`,
+      },
+      {
+        id: 'act_tl_6',
+        timestamp: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
+        studentId: targetStudentId || 'usr_stu_3',
+        studentName: sName,
+        questionId: 'q_2',
+        questionTitle: 'Valid Balanced Parentheses',
+        action: 'COMPILATION_ERROR',
+        status: 'ERROR',
+        details: 'Compilation / syntax failure: Unexpected token "}" on line 14.',
+        sessionId: `sess_${targetStudentId || 'usr_stu_3'}`,
+        metadata: { language: 'javascript' },
+      },
+      {
+        id: 'act_tl_7',
+        timestamp: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
+        studentId: targetStudentId || 'usr_stu_3',
+        studentName: sName,
+        questionId: 'q_2',
+        questionTitle: 'Valid Balanced Parentheses',
+        action: 'SUBMISSION_ACCEPTED',
+        status: 'ACCEPTED',
+        details: 'Passed 6 / 6 test cases for Valid Balanced Parentheses. Awarded +60 points.',
+        sessionId: `sess_${targetStudentId || 'usr_stu_3'}`,
+        metadata: { scoreAdded: 60, executionTimeMs: 38, language: 'javascript' },
+      },
+    ];
+
+    let filtered = [...mockEvents];
+    if (params?.action && params.action !== 'ALL') {
+      filtered = filtered.filter((e) => e.action === params.action);
+    }
+    if (params?.status && params.status !== 'ALL') {
+      filtered = filtered.filter((e) => e.status === params.status);
+    }
+    if (params?.search) {
+      const q = String(params.search).toLowerCase();
+      filtered = filtered.filter(
+        (e) =>
+          e.details.toLowerCase().includes(q) ||
+          e.action.toLowerCase().includes(q) ||
+          (e.questionTitle && e.questionTitle.toLowerCase().includes(q))
+      );
+    }
+
+    return {
+      success: true,
+      data: filtered,
+      pagination: {
+        page: Number(params?.page || 1),
+        limit: Number(params?.limit || 20),
+        total: filtered.length,
+        totalPages: 1,
+      },
+      summary: {
+        totalEvents: filtered.length,
+        questionsOpenedCount: 2,
+        questionsSolvedCount: 2,
+        questionsSkippedCount: 0,
+        codeExecutionsCount: 1,
+        submissionsAcceptedCount: 2,
+        submissionsRejectedCount: 0,
+        compilationErrorsCount: 1,
+        sessionStartTime: mockEvents[0].timestamp,
+        lastActivityTime: mockEvents[mockEvents.length - 1].timestamp,
+      },
+    };
+  }
+
+  if (cleanEndpoint === 'student/contest/question-opened' || cleanEndpoint === 'student/contest/telemetry-event') {
+    return { success: true, message: 'Telemetry logged successfully' };
   }
 
   if (cleanEndpoint === 'faculty/alerts') {
@@ -2135,6 +2354,14 @@ export function handleMockFallback(method: string, endpoint: string, body?: any,
     const isFaculty = cleanEndpoint.startsWith('faculty');
     let list = isFaculty ? mockUsers.filter((u) => u.role === 'STUDENT').slice(0, 35) : mockUsers.filter((u) => u.role === 'STUDENT');
 
+    const selectedContextId = params?.contextId || params?.contestId;
+    if (selectedContextId && selectedContextId !== 'ALL') {
+      const targetContest = mockContests.find((c) => c.id === selectedContextId || c.name === selectedContextId);
+      if (targetContest && Array.isArray(targetContest.participantIds) && targetContest.participantIds.length > 0) {
+        list = list.filter((s) => targetContest.participantIds.includes(s.id));
+      }
+    }
+
     const searchVal = params?.search || params?.q;
     if (searchVal) {
       const q = String(searchVal).toLowerCase().trim();
@@ -2155,7 +2382,21 @@ export function handleMockFallback(method: string, endpoint: string, body?: any,
       list = list.filter((s) => s.status === String(params.status).toUpperCase());
     }
 
-    return { success: true, count: list.length, total: list.length, data: list };
+    const contexts = mockContests.map((c) => ({
+      id: c.id,
+      name: c.name,
+      status: c.status,
+      participantsCount: c.participantsCount || (Array.isArray(c.participantIds) ? c.participantIds.length : 0),
+    }));
+
+    return {
+      success: true,
+      count: list.length,
+      total: list.length,
+      selectedContextId: selectedContextId || 'ALL',
+      contexts,
+      data: list,
+    };
   }
 
   if (cleanEndpoint.startsWith('faculty/students/') || cleanEndpoint.startsWith('admin/students/')) {
@@ -2239,13 +2480,114 @@ export function handleMockFallback(method: string, endpoint: string, body?: any,
       return { success: true, count: activities.length, data: activities };
     }
 
+    const profile = {
+      ...stu,
+      year: (stu as any).year || '3rd Year',
+      department: stu.department || 'Computer Science & Engineering',
+    };
+
+    const sessionHistory = [
+      {
+        id: `sess_${stu.id}`,
+        contestTitle: 'Hackathon Grand Arena 2026',
+        startedAt: new Date(Date.now() - 7200000).toISOString(),
+        endedAt: stu.sessionStatus === 'COMPLETED' ? new Date(Date.now() - 1800000).toISOString() : null,
+        durationMinutes: 120,
+        score: stu.score || 180,
+        solvedCount: stu.solvedCount || 4,
+        attemptsCount: stu.attemptsCount || 6,
+        completionStatus: stu.sessionStatus || 'ACTIVE',
+        currentDifficulty: stu.currentDifficulty || 2,
+      },
+      {
+        id: `sess_prev_${stu.id}`,
+        contestTitle: 'Practice Qualifier Round A',
+        startedAt: new Date(Date.now() - 86400000 * 3).toISOString(),
+        endedAt: new Date(Date.now() - 86400000 * 3 + 3600000 * 1.5).toISOString(),
+        durationMinutes: 90,
+        score: Math.max(0, (stu.score || 180) - 45),
+        solvedCount: Math.max(1, (stu.solvedCount || 4) - 1),
+        attemptsCount: Math.max(2, (stu.attemptsCount || 6) - 1),
+        completionStatus: 'COMPLETED',
+        currentDifficulty: Math.max(1, (stu.currentDifficulty || 2) - 1),
+      },
+    ];
+
+    const recentSubmissions = [
+      {
+        id: `sub_${stu.id}_1`,
+        questionTitle: 'Two Sum Target Indices',
+        difficulty: stu.currentDifficulty || 2,
+        verdict: 'ACCEPTED',
+        score: 50,
+        language: 'Kotlin 2.0',
+        submittedAt: new Date(Date.now() - 14 * 60000).toISOString(),
+        executionTime: '38 ms',
+        memoryUsed: '24.5 MB',
+      },
+      {
+        id: `sub_${stu.id}_2`,
+        questionTitle: 'Valid Balanced Parentheses',
+        difficulty: Math.max(1, (stu.currentDifficulty || 2) - 1),
+        verdict: 'WRONG_ANSWER',
+        score: 0,
+        language: 'Kotlin 2.0',
+        submittedAt: new Date(Date.now() - 28 * 60000).toISOString(),
+        executionTime: '62 ms',
+        memoryUsed: '23.1 MB',
+      },
+      {
+        id: `sub_${stu.id}_3`,
+        questionTitle: 'Container With Most Water',
+        difficulty: 1,
+        verdict: 'ACCEPTED',
+        score: 40,
+        language: 'Kotlin 2.0',
+        submittedAt: new Date(Date.now() - 49 * 60000).toISOString(),
+        executionTime: '45 ms',
+        memoryUsed: '21.9 MB',
+      },
+    ];
+
+    const activities = [
+      {
+        id: `act_${stu.id}_1`,
+        timestamp: new Date(Date.now() - 5 * 60000).toISOString(),
+        studentId: stu.id,
+        studentName: stu.name,
+        activity: 'QUESTION_SOLVED',
+        details: `Solved Level ${stu.currentDifficulty || 2} problem with full score`,
+        scoreAdded: 50,
+      },
+      {
+        id: `act_${stu.id}_2`,
+        timestamp: new Date(Date.now() - 18 * 60000).toISOString(),
+        studentId: stu.id,
+        studentName: stu.name,
+        activity: 'CODE_RUN',
+        details: 'Sandbox test runner executed on custom test cases',
+        scoreAdded: 0,
+      },
+      {
+        id: `act_${stu.id}_3`,
+        timestamp: new Date(Date.now() - 42 * 60000).toISOString(),
+        studentId: stu.id,
+        studentName: stu.name,
+        activity: 'LOGIN',
+        details: 'Student session authenticated via University Portal',
+        scoreAdded: 0,
+      },
+    ];
+
     return {
       success: true,
       data: {
-        profile: stu,
+        profile,
         contestPerformance: {
           score: stu.score || 180,
           rank: stu.rank || 4,
+          solved: stu.solvedCount || 4,
+          attempts: stu.attemptsCount || 6,
           solvedCount: stu.solvedCount || 4,
           skippedCount: stu.skippedCount || 1,
           attemptsCount: stu.attemptsCount || 6,
@@ -2257,10 +2599,17 @@ export function handleMockFallback(method: string, endpoint: string, body?: any,
         currentSession: {
           sessionId: `sess_${stu.id}`,
           status: stu.sessionStatus || 'ACTIVE',
+          sessionStatus: stu.sessionStatus || 'ACTIVE',
+          currentQuestion: 'Two Sum Target Indices',
+          currentDifficulty: stu.currentDifficulty || 2,
+          timeRemaining: '01:34:10',
           ipAddress: '192.168.1.45',
           device: 'Chrome 124 / macOS',
           loginTime: new Date(Date.now() - 3600000).toISOString(),
         },
+        sessions: sessionHistory,
+        recentSubmissions,
+        activities,
         ...stu
       }
     };
@@ -2709,6 +3058,10 @@ export function handleMockFallback(method: string, endpoint: string, body?: any,
   if (cleanEndpoint.startsWith('admin/notifications/') || cleanEndpoint.startsWith('faculty/notifications/')) {
     const parts = cleanEndpoint.split('/');
     const notifId = parts[2];
+    if (method === 'DELETE') {
+      mockNotifications = mockNotifications.filter((item) => item.id !== notifId);
+      return { success: true, message: 'Notification removed' };
+    }
     const n = mockNotifications.find((item) => item.id === notifId);
     if (n) n.read = true;
     return { success: true, message: 'Notification marked as read' };
@@ -2716,12 +3069,33 @@ export function handleMockFallback(method: string, endpoint: string, body?: any,
 
   // 12b. Faculty Assigned Contests
   if (cleanEndpoint === 'faculty/contests') {
-    const fac = mockUsers.find((u) => u.role === 'FACULTY') || mockUsers[2];
+    const fac = getMockLoggedInUser();
     const assigned = mockContests.filter((c) =>
-      (Array.isArray(c.assignedFacultyIds) && c.assignedFacultyIds.includes(fac.id)) ||
-      (Array.isArray(c.assignedFaculty) && c.assignedFaculty.some((f: any) => f.id === fac.id))
+      c.status !== 'DELETED' && (
+        (Array.isArray(c.assignedFacultyIds) && c.assignedFacultyIds.includes(fac.id)) ||
+        (Array.isArray(c.assignedFaculty) && c.assignedFaculty.some((f: any) => f.id === fac.id)) ||
+        (c as any).assignedFacultyId === fac.id
+      )
     );
     return { success: true, count: assigned.length, data: assigned };
+  }
+
+  if (cleanEndpoint.startsWith('faculty/contests/')) {
+    const contestId = cleanEndpoint.split('/')[2];
+    const fac = getMockLoggedInUser();
+    const contest = mockContests.find((c) => c.id === contestId && c.status !== 'DELETED');
+    if (!contest) {
+      return { success: false, status: 404, message: 'Contest not found' };
+    }
+    const isAssigned = (
+      (Array.isArray(contest.assignedFacultyIds) && contest.assignedFacultyIds.includes(fac.id)) ||
+      (Array.isArray(contest.assignedFaculty) && contest.assignedFaculty.some((f: any) => f.id === fac.id)) ||
+      (contest as any).assignedFacultyId === fac.id
+    );
+    if (!isAssigned) {
+      return { success: false, status: 403, message: 'Access Denied: You are not assigned to supervise this contest context.' };
+    }
+    return { success: true, data: contest };
   }
 
   // 13. Student Contest Arena Endpoints
@@ -2795,9 +3169,9 @@ export function handleMockFallback(method: string, endpoint: string, body?: any,
         availableContests: published,
         currentQuestion: mockQuestions[0],
         recentSubmissions: [
-          { id: 'sub_st1', questionTitle: 'Two Sum Target Indices', difficulty: 1, result: 'ACCEPTED', executionTimeMs: 38, submittedAt: new Date(Date.now() - 3600000).toISOString() },
-          { id: 'sub_st2', questionTitle: 'Valid Balanced Parentheses', difficulty: 2, result: 'ACCEPTED', executionTimeMs: 44, submittedAt: new Date(Date.now() - 2400000).toISOString() },
-          { id: 'sub_st3', questionTitle: 'Container With Most Water', difficulty: 3, result: 'ACCEPTED', executionTimeMs: 62, submittedAt: new Date(Date.now() - 1200000).toISOString() },
+          { id: 'sub_st1', questionTitle: 'Two Sum Target Indices', difficulty: 1, result: 'ACCEPTED', verdict: 'ACCEPTED', executionTimeMs: 38, submittedAt: new Date(Date.now() - 3600000).toISOString() },
+          { id: 'sub_st2', questionTitle: 'Valid Balanced Parentheses', difficulty: 2, result: 'ACCEPTED', verdict: 'ACCEPTED', executionTimeMs: 44, submittedAt: new Date(Date.now() - 2400000).toISOString() },
+          { id: 'sub_st3', questionTitle: 'Container With Most Water', difficulty: 3, result: 'ACCEPTED', verdict: 'ACCEPTED', executionTimeMs: 62, submittedAt: new Date(Date.now() - 1200000).toISOString() },
         ]
       }
     };
@@ -2988,6 +3362,21 @@ export function handleMockFallback(method: string, endpoint: string, body?: any,
     }
 
     let facs = mockUsers.filter((u) => u.role === 'FACULTY');
+    const selectedContextId = params?.contextId || params?.contestId;
+    if (selectedContextId && selectedContextId !== 'ALL') {
+      const targetContest = mockContests.find((c) => c.id === selectedContextId || c.name === selectedContextId);
+      if (targetContest) {
+        const assignedIds = new Set<string>();
+        if (Array.isArray(targetContest.assignedFacultyIds)) {
+          targetContest.assignedFacultyIds.forEach((id: string) => assignedIds.add(id));
+        }
+        if (Array.isArray(targetContest.assignedFaculty)) {
+          targetContest.assignedFaculty.forEach((f: any) => assignedIds.add(f.id));
+        }
+        facs = facs.filter((f) => assignedIds.has(f.id));
+      }
+    }
+
     const searchVal = params?.search || params?.q;
     if (searchVal) {
       const q = String(searchVal).toLowerCase().trim();
@@ -3000,7 +3389,21 @@ export function handleMockFallback(method: string, endpoint: string, body?: any,
     if (params?.department && params.department !== 'ALL') {
       facs = facs.filter((f) => f.department === params.department);
     }
-    return { success: true, count: facs.length, data: facs };
+
+    const contexts = mockContests.map((c) => ({
+      id: c.id,
+      name: c.name,
+      status: c.status,
+      assignedFacultyCount: Array.isArray(c.assignedFacultyIds) ? c.assignedFacultyIds.length : 0,
+    }));
+
+    return {
+      success: true,
+      count: facs.length,
+      selectedContextId: selectedContextId || 'ALL',
+      contexts,
+      data: facs,
+    };
   }
 
   if (cleanEndpoint.startsWith('admin/faculty/')) {
